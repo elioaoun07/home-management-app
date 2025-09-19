@@ -1,0 +1,107 @@
+import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function PATCH(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
+  const userId = process.env.DEV_USER_ID ?? "";
+  if (!url || !serviceKey)
+    return NextResponse.json(
+      { error: "Missing SUPABASE env vars" },
+      { status: 500 }
+    );
+  if (!userId)
+    return NextResponse.json(
+      { error: "DEV_USER_ID is required" },
+      { status: 400 }
+    );
+
+  const { name, visible }: { name?: string; visible?: boolean } =
+    await req.json();
+  if (!name && typeof visible === "undefined") {
+    return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+  }
+
+  const updates: Record<string, any> = {};
+  if (typeof name === "string" && name.trim()) {
+    updates.name = name.trim();
+  }
+  if (typeof visible === "boolean") {
+    updates.visible = visible;
+  }
+
+  const supabase = createClient(url, serviceKey, {
+    auth: { persistSession: false },
+  });
+  const { data, error } = await supabase
+    .from("user_categories")
+    .update(updates)
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Update category error", error);
+    return NextResponse.json(
+      { error: "Failed to update category" },
+      { status: 500 }
+    );
+  }
+  return NextResponse.json(data);
+}
+
+export async function DELETE(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
+  const userId = process.env.DEV_USER_ID ?? "";
+  if (!url || !serviceKey)
+    return NextResponse.json(
+      { error: "Missing SUPABASE env vars" },
+      { status: 500 }
+    );
+  if (!userId)
+    return NextResponse.json(
+      { error: "DEV_USER_ID is required" },
+      { status: 400 }
+    );
+
+  const supabase = createClient(url, serviceKey, {
+    auth: { persistSession: false },
+  });
+  // Soft delete: set visible=false for the category and all its children
+  const { error: err1 } = await supabase
+    .from("user_categories")
+    .update({ visible: false })
+    .eq("user_id", userId)
+    .in("id", [id]);
+  if (err1) {
+    console.error("Soft delete category error", err1);
+    return NextResponse.json(
+      { error: "Failed to delete category" },
+      { status: 500 }
+    );
+  }
+  // Also hide its subcategories
+  const { error: err2 } = await supabase
+    .from("user_categories")
+    .update({ visible: false })
+    .eq("user_id", userId)
+    .eq("parent_id", id);
+  if (err2) {
+    console.error("Soft delete subcategories error", err2);
+    return NextResponse.json(
+      { error: "Failed to delete subcategories" },
+      { status: 500 }
+    );
+  }
+  return NextResponse.json({ success: true });
+}
