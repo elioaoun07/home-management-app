@@ -20,7 +20,7 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, ReceiptText } from "lucide-react";
-import React from "react";
+import React, { useMemo } from "react";
 
 export default function ExpenseShell({
   children,
@@ -34,15 +34,19 @@ export default function ExpenseShell({
       title: "Transaction",
       href: "/expense",
       icon: ReceiptText,
-      isActive: pathname === "/expense",
     },
     {
       title: "Dashboard",
       href: "/dashboard",
       icon: LayoutDashboard,
-      isActive: pathname?.startsWith("/dashboard") ?? false,
     },
   ];
+
+  // Find current item based on pathname
+  const currentTitle = useMemo(() => {
+    const match = nav.find((item) => pathname.startsWith(item.href));
+    return match?.title ?? "Expense";
+  }, [pathname]);
 
   return (
     <SidebarProvider>
@@ -56,7 +60,7 @@ export default function ExpenseShell({
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       asChild
-                      isActive={item.isActive}
+                      isActive={pathname.startsWith(item.href)}
                       tooltip={item.title}
                     >
                       <Link href={item.href} className="flex items-center">
@@ -76,7 +80,7 @@ export default function ExpenseShell({
       <SidebarInset>
         <div className="flex h-12 items-center gap-2 border-b px-4">
           <SidebarTrigger />
-          <div className="font-medium">Expense</div>
+          <div className="font-medium">{currentTitle}</div>
         </div>
         <div className={cn("flex-1 p-4")}>{children}</div>
       </SidebarInset>
