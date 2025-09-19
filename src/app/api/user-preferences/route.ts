@@ -1,33 +1,21 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabaseServer } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
-  const userId = process.env.DEV_USER_ID;
-
-  if (!url || !serviceKey) {
-    return NextResponse.json(
-      { error: "Missing SUPABASE env vars" },
-      { status: 500 }
-    );
+  const supabase = supabaseServer(cookies());
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!userId) {
-    return NextResponse.json(
-      { error: "DEV_USER_ID is required" },
-      { status: 400 }
-    );
-  }
-
-  const supabase = createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  });
   const { data, error } = await supabase
     .from("user_preferences")
     .select("section_order")
-    .eq("user_id", userId)
+    .eq("user_id", user.id)
     .single();
 
   if (error) {
@@ -37,26 +25,13 @@ export async function GET(_req: NextRequest) {
 }
 
 export async function PATCH(_req: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
-  const userId = process.env.DEV_USER_ID;
-
-  if (!url || !serviceKey) {
-    return NextResponse.json(
-      { error: "Missing SUPABASE env vars" },
-      { status: 500 }
-    );
+  const supabase = supabaseServer(cookies());
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!userId) {
-    return NextResponse.json(
-      { error: "DEV_USER_ID is required" },
-      { status: 400 }
-    );
-  }
-
-  const supabase = createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  });
   const body = await _req.json();
   const { section_order } = body;
   if (!Array.isArray(section_order)) {
@@ -69,7 +44,7 @@ export async function PATCH(_req: NextRequest) {
   const { error } = await supabase
     .from("user_preferences")
     .update({ section_order })
-    .eq("user_id", userId);
+    .eq("user_id", user.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

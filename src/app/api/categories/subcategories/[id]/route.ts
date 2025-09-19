@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabaseServer } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function PATCH(
@@ -6,19 +7,13 @@ export async function PATCH(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
-  const userId = process.env.DEV_USER_ID ?? "";
-  if (!url || !serviceKey)
-    return NextResponse.json(
-      { error: "Missing SUPABASE env vars" },
-      { status: 500 }
-    );
-  if (!userId)
-    return NextResponse.json(
-      { error: "DEV_USER_ID is required" },
-      { status: 400 }
-    );
+  const supabase = supabaseServer(cookies());
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { name, visible }: { name?: string; visible?: boolean } =
     await _req.json();
@@ -32,14 +27,11 @@ export async function PATCH(
   }
   if (typeof visible === "boolean") updates.visible = visible;
 
-  const supabase = createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  });
   const { data, error } = await supabase
     .from("user_categories")
     .update(updates)
     .eq("id", id)
-    .eq("user_id", userId)
+    .eq("user_id", user.id)
     .select()
     .single();
   if (error) {
@@ -57,28 +49,18 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
-  const userId = process.env.DEV_USER_ID ?? "";
-  if (!url || !serviceKey)
-    return NextResponse.json(
-      { error: "Missing SUPABASE env vars" },
-      { status: 500 }
-    );
-  if (!userId)
-    return NextResponse.json(
-      { error: "DEV_USER_ID is required" },
-      { status: 400 }
-    );
-
-  const supabase = createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  });
+  const supabase = supabaseServer(cookies());
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { error } = await supabase
     .from("user_categories")
     .update({ visible: false })
     .eq("id", id)
-    .eq("user_id", userId);
+    .eq("user_id", user.id);
   if (error) {
     console.error("Delete subcategory error", error);
     return NextResponse.json(

@@ -9,6 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import AccountSelect from "./AccountSelect";
 import CategoryGrid from "./CategoryGrid";
 import SubcategoryGrid from "./SubcategoryGrid";
@@ -51,21 +52,27 @@ export default function TemplateDialog({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !amount || isNaN(Number(amount))) {
-      // Optionally show error
+      toast.error("Please provide a valid name and amount");
       return;
     }
     setSaving(true);
-    await onSave({
-      ...initial,
-      name: name.trim(),
-      account_id: accountId || undefined,
-      category_id: categoryId || undefined,
-      subcategory_id: subcategoryId || undefined,
-      amount: amount,
-      description: description || null,
-    });
-    setSaving(false);
-    onOpenChange(false);
+    try {
+      await onSave({
+        ...initial,
+        name: name.trim(),
+        account_id: accountId || undefined,
+        category_id: categoryId || undefined,
+        subcategory_id: subcategoryId || undefined,
+        amount: amount,
+        description: description || null,
+      });
+      onOpenChange(false);
+    } catch (err: any) {
+      const msg = err?.message || "Failed to save template";
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

@@ -1,3 +1,4 @@
+import UserMenu from "@/components/auth/UserMenu";
 import { Toaster } from "@/components/ui/sonner";
 import type { Metadata } from "next";
 import "./globals.css";
@@ -17,9 +18,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        {/* Wrap once, in a single tree */}
         <QueryProvider>
           <Providers>
+            {/* User menu shown only when a session exists */}
+            <UserMenu />
             {children}
             <Toaster richColors closeButton />
           </Providers>

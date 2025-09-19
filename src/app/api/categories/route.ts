@@ -1,37 +1,29 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabaseServer } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic"; // no caching
 
 export async function GET(_req: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
-  const userId =
-    _req.nextUrl.searchParams.get("userId") ?? process.env.DEV_USER_ID ?? "";
+  const supabase = supabaseServer(cookies());
   const accountId = _req.nextUrl.searchParams.get("accountId") ?? "";
 
-  if (!url || !serviceKey) {
-    return NextResponse.json(
-      { error: "Missing SUPABASE env vars" },
-      { status: 500 }
-    );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!userId)
-    return NextResponse.json({ error: "userId is required" }, { status: 400 });
   if (!accountId)
     return NextResponse.json(
       { error: "accountId is required" },
       { status: 400 }
     );
 
-  const supabase = createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  });
-
   const { data, error } = await supabase
     .from("user_categories")
     .select("id,name,icon,color,parent_id,position,visible")
-    .eq("user_id", userId)
+    .eq("user_id", user.id)
     .eq("account_id", accountId)
     .eq("visible", true)
     .order("position", { ascending: true, nullsFirst: true })

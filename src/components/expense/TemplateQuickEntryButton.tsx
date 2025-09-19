@@ -42,12 +42,33 @@ export default function TemplateQuickEntryButton({
   const [quickEditDescription, setQuickEditDescription] = useState("");
   const [quickSaving, setQuickSaving] = useState(false);
 
-  const refreshTemplates = () => {
+  const refreshTemplates = async () => {
     setLoading(true);
-    fetch("/api/transaction-templates")
-      .then((res) => res.json())
-      .then((data) => setTemplates(data || []))
-      .finally(() => setLoading(false));
+    try {
+      const res = await fetch("/api/transaction-templates");
+      if (!res.ok) {
+        let msg = "Failed to load templates";
+        try {
+          const j = await res.json();
+          if (j?.error) msg = j.error;
+        } catch {}
+        if (res.status === 401) {
+          toast.error("Please sign in to view templates");
+        } else {
+          toast.error(msg);
+        }
+        setTemplates([]);
+        return;
+      }
+      const data = await res.json();
+      setTemplates(data || []);
+    } catch (err) {
+      console.error("Failed to load templates", err);
+      toast.error("Failed to load templates");
+      setTemplates([]);
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => {
     if (open) {
@@ -125,12 +146,30 @@ export default function TemplateQuickEntryButton({
                       size="icon"
                       variant="ghost"
                       onClick={async () => {
-                        await fetch("/api/transaction-templates", {
-                          method: "DELETE",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ id: tpl.id }),
-                        });
-                        refreshTemplates();
+                        try {
+                          const res = await fetch(
+                            "/api/transaction-templates",
+                            {
+                              method: "DELETE",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ id: tpl.id }),
+                            }
+                          );
+                          if (!res.ok) {
+                            let msg = "Failed to delete template";
+                            try {
+                              const j = await res.json();
+                              if (j?.error) msg = j.error;
+                            } catch {}
+                            toast.error(msg);
+                            return;
+                          }
+                          toast.success("Template deleted");
+                          refreshTemplates();
+                        } catch (err) {
+                          console.error("Delete template failed", err);
+                          toast.error("Failed to delete template");
+                        }
                       }}
                       aria-label="Delete"
                     >
@@ -151,31 +190,52 @@ export default function TemplateQuickEntryButton({
         }}
         initial={editing}
         onSave={async (tpl) => {
-          if (tpl.id) {
-            await fetch("/api/transaction-templates", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(tpl),
-            });
-          } else {
-            await fetch("/api/transaction-templates", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(tpl),
-            });
+          // Create or update a template with error handling. Throw on failure so the dialog stays open.
+          const method = tpl.id ? "PATCH" : "POST";
+          const res = await fetch("/api/transaction-templates", {
+            method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(tpl),
+          });
+          if (!res.ok) {
+            let msg = tpl.id
+              ? "Failed to update template"
+              : "Failed to create template";
+            try {
+              const j = await res.json();
+              if (j?.error) msg = j.error;
+            } catch {}
+            toast.error(msg);
+            throw new Error(msg);
           }
+          toast.success(tpl.id ? "Template updated" : "Template created");
           refreshTemplates();
         }}
         onDelete={
           editing && editing.id
             ? async () => {
-                await fetch("/api/transaction-templates", {
-                  method: "DELETE",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: editing.id }),
-                });
-                setDialogOpen(false);
-                refreshTemplates();
+                try {
+                  const res = await fetch("/api/transaction-templates", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: editing.id }),
+                  });
+                  if (!res.ok) {
+                    let msg = "Failed to delete template";
+                    try {
+                      const j = await res.json();
+                      if (j?.error) msg = j.error;
+                    } catch {}
+                    toast.error(msg);
+                    return;
+                  }
+                  toast.success("Template deleted");
+                  setDialogOpen(false);
+                  refreshTemplates();
+                } catch (err) {
+                  console.error("Delete template failed", err);
+                  toast.error("Failed to delete template");
+                }
               }
             : undefined
         }

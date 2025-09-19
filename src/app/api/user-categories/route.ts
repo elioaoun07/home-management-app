@@ -1,30 +1,18 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabaseServer } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(_req: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
-  const userId = process.env.DEV_USER_ID;
-
-  if (!url || !serviceKey) {
-    return NextResponse.json(
-      { error: "Missing SUPABASE env vars" },
-      { status: 500 }
-    );
+  const supabase = supabaseServer(cookies());
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!userId) {
-    return NextResponse.json(
-      { error: "DEV_USER_ID is required" },
-      { status: 400 }
-    );
-  }
-
-  const supabase = createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  });
 
   try {
     const body = await _req.json();
@@ -53,7 +41,7 @@ export async function POST(_req: NextRequest) {
     const { data: existing, error: _dupError } = await supabase
       .from("user_categories")
       .select("id")
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .eq("account_id", account_id)
       .eq("slug", slug)
       .maybeSingle();
@@ -78,7 +66,7 @@ export async function POST(_req: NextRequest) {
     });
 
     const insertData = insertDataSchema.parse({
-      user_id: userId,
+      user_id: user.id,
       name,
       icon: icon || null,
       color: color || null,

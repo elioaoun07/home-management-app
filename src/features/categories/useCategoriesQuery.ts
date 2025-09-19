@@ -9,12 +9,8 @@ import { useQuery } from "@tanstack/react-query";
 // Use the static Category type for consistency with defaults
 export type Category = DefaultCategory;
 
-async function fetchCategories(
-  accountId: string,
-  userId?: string
-): Promise<Category[]> {
+async function fetchCategories(accountId: string): Promise<Category[]> {
   const qs = new URLSearchParams({ accountId });
-  if (userId) qs.set("userId", userId);
   const res = await fetch(`/api/categories?${qs.toString()}`, {
     cache: "no-store",
   });
@@ -27,11 +23,11 @@ async function fetchCategories(
   return categories;
 }
 
-/** Query per selected account; pass userId if you want to override DEV_USER_ID on the server. */
-export function useCategories(accountId?: string, userId?: string) {
+/** Query per selected account. */
+export function useCategories(accountId?: string) {
   return useQuery({
-    queryKey: ["categories", accountId, userId ?? "server-default"],
-    queryFn: () => fetchCategories(accountId as string, userId),
+    queryKey: ["categories", accountId],
+    queryFn: () => fetchCategories(accountId as string),
     enabled: !!accountId,
   });
 }
