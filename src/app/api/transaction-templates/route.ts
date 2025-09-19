@@ -10,7 +10,7 @@ const getSupabase = () => {
   return createClient(url, serviceKey, { auth: { persistSession: false } });
 };
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const userId = process.env.DEV_USER_ID;
   if (!userId)
     return NextResponse.json(
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data);
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   const userId = process.env.DEV_USER_ID;
   if (!userId)
     return NextResponse.json(
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   const supabase = getSupabase();
-  const body = await req.json();
+  const body = await _req.json();
   const { name, account_id, category_id, subcategory_id, amount, description } =
     body;
   if (!name || !amount)
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data);
 }
 
-export async function PATCH(req: NextRequest) {
+export async function PATCH(_req: NextRequest) {
   const userId = process.env.DEV_USER_ID;
   if (!userId)
     return NextResponse.json(
@@ -70,7 +70,7 @@ export async function PATCH(req: NextRequest) {
       { status: 400 }
     );
   const supabase = getSupabase();
-  const body = await req.json();
+  const body = await _req.json();
   const { id, ...fields } = body;
   if (!id)
     return NextResponse.json(
@@ -89,7 +89,7 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json(data);
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE(_req: NextRequest) {
   const userId = process.env.DEV_USER_ID;
   if (!userId)
     return NextResponse.json(
@@ -97,7 +97,7 @@ export async function DELETE(req: NextRequest) {
       { status: 400 }
     );
   const supabase = getSupabase();
-  const body = await req.json();
+  const body = await _req.json();
   const { id } = body;
   if (!id)
     return NextResponse.json(

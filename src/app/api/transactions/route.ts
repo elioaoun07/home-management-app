@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
   const userId = process.env.DEV_USER_ID;
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    const body = await req.json();
+    const body = await _req.json();
     const { account_id, category_id, subcategory_id, amount, description } =
       body;
 

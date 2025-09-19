@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
   const userId = process.env.DEV_USER_ID;
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data);
 }
 
-export async function PATCH(req: NextRequest) {
+export async function PATCH(_req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
   const userId = process.env.DEV_USER_ID;
@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest) {
   const supabase = createClient(url, serviceKey, {
     auth: { persistSession: false },
   });
-  const body = await req.json();
+  const body = await _req.json();
   const { section_order } = body;
   if (!Array.isArray(section_order)) {
     return NextResponse.json(

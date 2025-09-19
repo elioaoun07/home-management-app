@@ -3,12 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic"; // no caching
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
   const userId =
-    req.nextUrl.searchParams.get("userId") ?? process.env.DEV_USER_ID ?? "";
-  const accountId = req.nextUrl.searchParams.get("accountId") ?? "";
+    _req.nextUrl.searchParams.get("userId") ?? process.env.DEV_USER_ID ?? "";
+  const accountId = _req.nextUrl.searchParams.get("accountId") ?? "";
 
   if (!url || !serviceKey) {
     return NextResponse.json(

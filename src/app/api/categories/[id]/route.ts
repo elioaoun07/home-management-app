@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function PATCH(
-  req: NextRequest,
+  _req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
@@ -21,7 +21,7 @@ export async function PATCH(
     );
 
   const { name, visible }: { name?: string; visible?: boolean } =
-    await req.json();
+    await _req.json();
   if (!name && typeof visible === "undefined") {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
@@ -56,7 +56,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  req: NextRequest,
+  _req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;

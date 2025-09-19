@@ -1,9 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY;
   const userId = process.env.DEV_USER_ID;
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    const body = await req.json();
+    const body = await _req.json();
     const {
       name,
       icon,
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
-    const { data: existing, error: dupError } = await supabase
+    const { data: existing, error: _dupError } = await supabase
       .from("user_categories")
       .select("id")
       .eq("user_id", userId)
@@ -63,7 +64,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const insertData: any = {
+    const insertDataSchema = z.object({
+      user_id: z.string(),
+      name: z.string(),
+      icon: z.string().nullable(),
+      color: z.string().nullable(),
+      account_id: z.string(),
+      parent_id: z.string().nullable(),
+      position: z.number(),
+      visible: z.boolean(),
+      default_category_id: z.string().nullable(),
+      // inserted_at, updated_at, slug handled by DB
+    });
+
+    const insertData = insertDataSchema.parse({
       user_id: userId,
       name,
       icon: icon || null,
@@ -73,8 +87,7 @@ export async function POST(req: NextRequest) {
       position: typeof position === "number" ? position : 0,
       visible: true,
       default_category_id: default_category_id || null,
-      // inserted_at, updated_at, slug handled by DB
-    };
+    });
 
     const { data, error } = await supabase
       .from("user_categories")
