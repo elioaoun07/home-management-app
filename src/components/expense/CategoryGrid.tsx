@@ -33,8 +33,15 @@ export default function CategoryGrid({
     return (
       <div className="space-y-3">
         <Label>Category</Label>
-        <div className="text-sm text-muted-foreground">
-          Please select an account first.
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <Button
+            variant="outline"
+            type="button"
+            className="justify-start opacity-50"
+            disabled
+          >
+            Select an account first
+          </Button>
         </div>
       </div>
     );

@@ -1,5 +1,6 @@
 "use client";
 
+import SettingsDialog from "@/components/settings/SettingsDialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,8 +12,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { createClient } from "@supabase/supabase-js";
-import { LogOut, User as UserIcon } from "lucide-react";
+import {
+  LogOut,
+  Settings as SettingsIcon,
+  User as UserIcon,
+} from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 
 type Props = {
   name: string;
@@ -28,6 +34,7 @@ const supabase = createClient(
 export default function UserMenuClient({ name, email, avatarUrl }: Props) {
   const router = useRouter();
   const pathname = usePathname();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Never show the menu on auth pages
   if (pathname === "/login" || pathname.startsWith("/reset-password")) {
@@ -55,6 +62,7 @@ export default function UserMenuClient({ name, email, avatarUrl }: Props) {
 
   return (
     <div className="fixed top-3 right-3 z-50">
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="flex items-center gap-2 px-2">
@@ -79,6 +87,10 @@ export default function UserMenuClient({ name, email, avatarUrl }: Props) {
             {email}
           </div>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
+            <SettingsIcon className="mr-2 h-4 w-4" />
+            <span>Settings</span>
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleSignOut}>
             <LogOut className="mr-2 h-4 w-4" />
             <span>Sign out</span>

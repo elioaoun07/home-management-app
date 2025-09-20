@@ -16,9 +16,7 @@ export default function CategoriesPanel({ userId }: { userId: string }) {
   return (
     <div className="space-y-4">
       <button
-        onClick={() =>
-          createCategory.mutate({ name: "New Category", visible: true })
-        }
+        onClick={() => createCategory.mutate({ name: "New Category" })}
         className="rounded-md border px-3 py-1"
       >
         + Add

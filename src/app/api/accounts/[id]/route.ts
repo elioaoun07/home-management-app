@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"; // disable caching for this route
 // PATCH /api/accounts/:id  — update { name?, type? }
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const supabase = supabaseServer(cookies());
   const {
@@ -17,7 +17,7 @@ export async function PATCH(
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const id = params.id;
+  const { id } = await context.params;
   let body: any = {};
   try {
     body = await req.json();
@@ -69,7 +69,7 @@ export async function PATCH(
 // DELETE /api/accounts/:id  — delete account (if owned)
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const supabase = supabaseServer(cookies());
   const {
@@ -78,7 +78,7 @@ export async function DELETE(
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const id = params.id;
+  const { id } = await context.params;
 
   const { error } = await supabase
     .from("accounts")

@@ -10,7 +10,32 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCategories } from "@/features/categories/useCategoriesQuery";
-import { ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  restrictToFirstScrollableAncestor,
+  restrictToVerticalAxis,
+} from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  ChevronDown,
+  ChevronRight,
+  GripVertical,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -18,7 +43,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accountId: string;
-  onChange?: () => void; // notify parent to refetch
+  onChange?: () => void;
 };
 
 type UICategory = {
@@ -78,7 +103,7 @@ export default function CategoryManagerDialog({
           a.name.localeCompare(b.name)
       );
 
-  // UI State
+  // UI state
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState<{
     type:
@@ -94,7 +119,6 @@ export default function CategoryManagerDialog({
   const [editingCatName, setEditingCatName] = useState<string>("");
   const [editingSubId, setEditingSubId] = useState<string | null>(null);
   const [editingSubName, setEditingSubName] = useState<string>("");
-
   const [confirmCatDeleteId, setConfirmCatDeleteId] = useState<string | null>(
     null
   );
@@ -102,28 +126,160 @@ export default function CategoryManagerDialog({
     null
   );
 
-  // Reorder mode
-  const [reorderMode, setReorderMode] = useState(false);
-  const [positions, setPositions] = useState<Record<string, number>>({}); // id -> local position
+  // Ordering state and click-to-edit position control
+  const [positions, setPositions] = useState<Record<string, number>>({});
+  const [editingPosId, setEditingPosId] = useState<string | null>(null);
 
-  // Initialize local positions when categories change or dialog opens
+  // DnD sensors
+  const sensors = useSensors(useSensor(PointerSensor));
+
+  function SortableRoot({
+    id,
+    children,
+  }: {
+    id: string;
+    children: React.ReactNode;
+  }) {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id });
+    const style: React.CSSProperties = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.6 : 1,
+    };
+    return (
+      <div ref={setNodeRef} style={style} className="py-2">
+        <div className="flex items-center justify-between w-full">
+          {children}
+          <button
+            {...attributes}
+            {...listeners}
+            className="ml-2 p-2 rounded hover:bg-muted/10"
+            aria-label="Drag to reorder"
+          >
+            <GripVertical className="h-5 w-5 text-muted-foreground" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function SortableSub({
+    id,
+    children,
+  }: {
+    id: string;
+    children: React.ReactNode;
+  }) {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id });
+    const style: React.CSSProperties = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.6 : 1,
+    };
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="flex items-center justify-between w-full"
+      >
+        <div className="flex items-center gap-2 flex-1">{children}</div>
+        <button
+          {...attributes}
+          {...listeners}
+          className="ml-2 p-2 rounded hover:bg-muted/10"
+          aria-label="Drag to reorder"
+        >
+          <GripVertical className="h-5 w-5 text-muted-foreground" />
+        </button>
+      </div>
+    );
+  }
+
+  // Initialize local positions
   useEffect(() => {
     if (!open || !isDbCategories) return;
     const next: Record<string, number> = {};
-    for (const c of all) {
-      next[c.id] = Math.max(1, Math.floor(c.position ?? 1e9)); // undefined -> huge; we’ll normalize before save
-    }
+    for (const c of all)
+      next[c.id] = Math.max(1, Math.floor(c.position ?? 1e9));
     setPositions(next);
   }, [open, isDbCategories, all]);
 
+  const displayRoots = useMemo(() => {
+    return [...roots].sort(
+      (a, b) => (positions[a.id] ?? 1e9) - (positions[b.id] ?? 1e9)
+    );
+  }, [roots, positions]);
+
+  const getDisplaySubs = (parentId: string) => {
+    const subs = getSubs(parentId);
+    return [...subs].sort(
+      (a, b) => (positions[a.id] ?? 1e9) - (positions[b.id] ?? 1e9)
+    );
+  };
+
+  // Drag handlers
+  function handleRootDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const ids = displayRoots.map((r) => r.id);
+    const oldIndex = ids.indexOf(active.id as string);
+    const newIndex = ids.indexOf(over.id as string);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const nextOrder = arrayMove(ids, oldIndex, newIndex);
+    const nextPositions = { ...positions };
+    nextOrder.forEach((id, i) => (nextPositions[id] = i + 1));
+    setPositions(nextPositions);
+  }
+
+  function handleSubDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    for (const r of displayRoots) {
+      const subs = getDisplaySubs(r.id);
+      const ids = subs.map((s) => s.id);
+      const oldIndex = ids.indexOf(active.id as string);
+      const newIndex = ids.indexOf(over.id as string);
+      if (oldIndex === -1 || newIndex === -1) continue;
+      const nextOrder = arrayMove(ids, oldIndex, newIndex);
+      const nextPositions = { ...positions };
+      nextOrder.forEach((id, i) => (nextPositions[id] = i + 1));
+      setPositions(nextPositions);
+      return;
+    }
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const activeId = String(event.active.id);
+    const overId = event.over ? String(event.over.id) : null;
+    if (!overId) return;
+    const rootIds = displayRoots.map((r) => r.id);
+    const isActiveRoot = rootIds.includes(activeId);
+    const isOverRoot = rootIds.includes(overId);
+    if (isActiveRoot && isOverRoot) return handleRootDragEnd(event);
+    handleSubDragEnd(event);
+  }
+
   function setPos(id: string, v: string) {
-    // enforce positive integers; empty = ignore
     const n = Number(v);
     if (!Number.isFinite(n)) return;
     setPositions((p) => ({ ...p, [id]: Math.max(1, Math.floor(n)) }));
   }
 
-  // ------- rename / delete actions (unchanged) -------
+  // rename/delete
   async function patchCategoryName(id: string, name: string) {
     setLoading({ type: "cat-rename", id });
     try {
@@ -202,14 +358,11 @@ export default function CategoryManagerDialog({
     }
   }
 
-  // ------- reorder save -------
+  // persist order
   function normalizeSequential(ids: string[]) {
-    // Sort by the local input value, then assign 1..N (stable)
-    const sorted = [...ids].sort((a, b) => {
-      const av = positions[a] ?? 1e9;
-      const bv = positions[b] ?? 1e9;
-      return av - bv;
-    });
+    const sorted = [...ids].sort(
+      (a, b) => (positions[a] ?? 1e9) - (positions[b] ?? 1e9)
+    );
     const out: Record<string, number> = {};
     sorted.forEach((id, i) => (out[id] = i + 1));
     return out;
@@ -217,22 +370,16 @@ export default function CategoryManagerDialog({
 
   async function saveOrder() {
     setLoading({ type: "reorder-save" });
-
     try {
-      // 1) Normalize root orders
       const rootIds = roots.map((c) => c.id);
       const rootSeq = normalizeSequential(rootIds);
-
-      // 2) Normalize each sub-list independently
       const subSeq: Record<string, number> = {};
       for (const r of roots) {
         const subs = getSubs(r.id);
         const ids = subs.map((s) => s.id);
         const seq = normalizeSequential(ids);
-        for (const id of ids) subSeq[id] = seq[id];
+        ids.forEach((id) => (subSeq[id] = seq[id]));
       }
-
-      // 3) Compute updates only for changed positions
       const updates: Array<{ id: string; position: number }> = [];
       for (const r of roots) {
         const current = Math.max(1, Math.floor(r.position ?? 1e9));
@@ -246,13 +393,10 @@ export default function CategoryManagerDialog({
           if (current !== next) updates.push({ id: s.id, position: next });
         }
       }
-
       if (updates.length === 0) {
         toast.info("No changes to save");
-        setReorderMode(false);
         return;
       }
-
       const res = await fetch("/api/user-categories/reorder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -262,9 +406,7 @@ export default function CategoryManagerDialog({
         const txt = await res.text();
         throw new Error(txt || "Failed to save order");
       }
-
       toast.success("Order saved");
-      setReorderMode(false);
       await refetch();
       onChange?.();
     } catch (e) {
@@ -288,224 +430,56 @@ export default function CategoryManagerDialog({
             first to edit or delete.
           </div>
         ) : (
-          <div className="space-y-3">
-            {/* Reorder toolbar */}
-            <div className="flex items-center gap-2">
-              {!reorderMode ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setReorderMode(true)}
-                >
-                  Reorder
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={saveOrder}
-                    disabled={loading.type === "reorder-save"}
-                  >
-                    {loading.type === "reorder-save"
-                      ? "Saving..."
-                      : "Save order"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setReorderMode(false);
-                      // reset to DB positions
-                      const reset: Record<string, number> = {};
-                      for (const c of all)
-                        reset[c.id] = Math.max(
-                          1,
-                          Math.floor(c.position ?? 1e9)
-                        );
-                      setPositions(reset);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </>
-              )}
-            </div>
-
+          <>
             <ScrollArea className="max-h-96 pr-2">
-              <ul className="divide-y">
-                {roots.map((cat) => {
-                  const isExpanded = !!expanded[cat.id];
-                  const subs = getSubs(cat.id);
-                  const isBusy = loading.id === cat.id && loading.type !== null;
-                  const isEditing = editingCatId === cat.id;
-
-                  return (
-                    <li key={cat.id} className="py-2">
-                      <div className="flex items-center justify-between">
-                        <button
-                          className="flex items-center gap-2 flex-1 text-left"
-                          onClick={() =>
-                            setExpanded((e) => ({ ...e, [cat.id]: !e[cat.id] }))
-                          }
-                          aria-label={isExpanded ? "Collapse" : "Expand"}
-                        >
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          )}
-                          {cat.icon && (
-                            <span className="text-lg">{cat.icon}</span>
-                          )}
-                          {isEditing ? (
-                            <input
-                              className="ml-1 border rounded px-2 py-1 text-sm flex-1 min-w-0"
-                              value={editingCatName}
-                              onChange={(e) =>
-                                setEditingCatName(e.target.value)
-                              }
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }}
-                              autoFocus
-                            />
-                          ) : (
-                            <span className="flex-1">{cat.name}</span>
-                          )}
-                        </button>
-
-                        {/* Root position input in reorder mode */}
-                        {reorderMode && (
-                          <div className="w-16">
-                            <Input
-                              type="number"
-                              min={1}
-                              value={positions[cat.id] ?? ""}
-                              onChange={(e) => setPos(cat.id, e.target.value)}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }}
-                            />
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-1">
-                          {isEditing ? (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  const nn = editingCatName.trim();
-                                  if (!nn) return;
-                                  void patchCategoryName(cat.id, nn);
-                                  setEditingCatId(null);
-                                }}
-                                disabled={loading.type !== null}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setEditingCatId(null);
-                                  setEditingCatName("");
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setEditingCatId(cat.id);
-                                  setEditingCatName(cat.name ?? "");
-                                }}
-                                aria-label="Rename"
-                                disabled={isBusy || reorderMode}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              {confirmCatDeleteId === cat.id ? (
-                                <>
-                                  <Button
-                                    variant="destructive"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      void deleteCategory(cat.id);
-                                    }}
-                                    disabled={loading.type !== null}
-                                  >
-                                    Confirm
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setConfirmCatDeleteId(null);
-                                    }}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setConfirmCatDeleteId(cat.id);
-                                  }}
-                                  aria-label="Delete"
-                                  disabled={isBusy || reorderMode}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                modifiers={[
+                  restrictToVerticalAxis,
+                  restrictToFirstScrollableAncestor,
+                ]}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={displayRoots.map((r) => r.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <ul className="divide-y">
+                    {displayRoots.map((cat) => {
+                      const isExpanded = !!expanded[cat.id];
+                      const subs = getDisplaySubs(cat.id);
+                      const isBusy =
+                        loading.id === cat.id && loading.type !== null;
+                      const isEditing = editingCatId === cat.id;
+                      return (
+                        <>
+                          <li key={cat.id} className="py-2">
+                            <SortableRoot id={cat.id}>
+                              <div className="flex items-center justify-between w-full">
+                                <button
+                                  className="flex items-center gap-2 flex-1 text-left"
+                                  onClick={() =>
+                                    setExpanded((e) => ({
+                                      ...e,
+                                      [cat.id]: !e[cat.id],
+                                    }))
+                                  }
+                                  aria-label={
+                                    isExpanded ? "Collapse" : "Expand"
+                                  }
                                 >
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <ul className="mt-2 ml-6 border-l pl-3 space-y-1">
-                          {subs.map((sub) => {
-                            const isSubBusy =
-                              loading.id === sub.id && loading.type !== null;
-                            const isSubEditing = editingSubId === sub.id;
-
-                            return (
-                              <li
-                                key={sub.id}
-                                className="flex items-center justify-between"
-                              >
-                                <div className="flex items-center gap-2 flex-1">
-                                  {sub.icon && (
-                                    <span className="text-lg">{sub.icon}</span>
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                   )}
-                                  {isSubEditing ? (
+                                  {isEditing ? (
                                     <input
-                                      className="border rounded px-2 py-1 text-sm flex-1"
-                                      value={editingSubName}
+                                      className="ml-1 border rounded px-2 py-1 text-sm flex-1 min-w-0"
+                                      value={editingCatName}
                                       onChange={(e) =>
-                                        setEditingSubName(e.target.value)
+                                        setEditingCatName(e.target.value)
                                       }
                                       onClick={(e) => {
                                         e.preventDefault();
@@ -514,30 +488,48 @@ export default function CategoryManagerDialog({
                                       autoFocus
                                     />
                                   ) : (
-                                    <span className="flex-1">{sub.name}</span>
+                                    <span className="flex-1">{cat.name}</span>
                                   )}
-                                </div>
-
-                                {/* Sub position input in reorder mode */}
-                                {reorderMode && (
+                                </button>
+                                <div className="flex items-center gap-2">
                                   <div className="w-16">
-                                    <Input
-                                      type="number"
-                                      min={1}
-                                      value={positions[sub.id] ?? ""}
-                                      onChange={(e) =>
-                                        setPos(sub.id, e.target.value)
-                                      }
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                      }}
-                                    />
+                                    {editingPosId === cat.id ? (
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        value={positions[cat.id] ?? ""}
+                                        onChange={(e) =>
+                                          setPos(cat.id, e.target.value)
+                                        }
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                        }}
+                                        onBlur={() => setEditingPosId(null)}
+                                        onKeyDown={(e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === "Escape"
+                                          )
+                                            setEditingPosId(null);
+                                        }}
+                                        autoFocus
+                                      />
+                                    ) : (
+                                      <button
+                                        className="w-full px-2 py-1 border rounded text-sm text-muted-foreground hover:bg-muted/10"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setEditingPosId(cat.id);
+                                        }}
+                                        aria-label="Edit position"
+                                      >
+                                        {positions[cat.id] ?? ""}
+                                      </button>
+                                    )}
                                   </div>
-                                )}
-
-                                <div className="flex items-center gap-1">
-                                  {isSubEditing ? (
+                                  {isEditing ? (
                                     <>
                                       <Button
                                         variant="ghost"
@@ -545,10 +537,10 @@ export default function CategoryManagerDialog({
                                         onClick={(e) => {
                                           e.preventDefault();
                                           e.stopPropagation();
-                                          const nn = editingSubName.trim();
+                                          const nn = editingCatName.trim();
                                           if (!nn) return;
-                                          void patchSubcategoryName(sub.id, nn);
-                                          setEditingSubId(null);
+                                          void patchCategoryName(cat.id, nn);
+                                          setEditingCatId(null);
                                         }}
                                         disabled={loading.type !== null}
                                       >
@@ -560,8 +552,8 @@ export default function CategoryManagerDialog({
                                         onClick={(e) => {
                                           e.preventDefault();
                                           e.stopPropagation();
-                                          setEditingSubId(null);
-                                          setEditingSubName("");
+                                          setEditingCatId(null);
+                                          setEditingCatName("");
                                         }}
                                       >
                                         Cancel
@@ -575,15 +567,15 @@ export default function CategoryManagerDialog({
                                         onClick={(e) => {
                                           e.preventDefault();
                                           e.stopPropagation();
-                                          setEditingSubId(sub.id);
-                                          setEditingSubName(sub.name ?? "");
+                                          setEditingCatId(cat.id);
+                                          setEditingCatName(cat.name ?? "");
                                         }}
                                         aria-label="Rename"
-                                        disabled={isSubBusy || reorderMode}
+                                        disabled={isBusy}
                                       >
                                         <Pencil className="h-4 w-4" />
                                       </Button>
-                                      {confirmSubDeleteId === sub.id ? (
+                                      {confirmCatDeleteId === cat.id ? (
                                         <>
                                           <Button
                                             variant="destructive"
@@ -591,7 +583,7 @@ export default function CategoryManagerDialog({
                                             onClick={(e) => {
                                               e.preventDefault();
                                               e.stopPropagation();
-                                              void deleteSubcategory(sub.id);
+                                              void deleteCategory(cat.id);
                                             }}
                                             disabled={loading.type !== null}
                                           >
@@ -603,7 +595,7 @@ export default function CategoryManagerDialog({
                                             onClick={(e) => {
                                               e.preventDefault();
                                               e.stopPropagation();
-                                              setConfirmSubDeleteId(null);
+                                              setConfirmCatDeleteId(null);
                                             }}
                                           >
                                             Cancel
@@ -616,38 +608,280 @@ export default function CategoryManagerDialog({
                                           onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            setConfirmSubDeleteId(sub.id);
+                                            setConfirmCatDeleteId(cat.id);
                                           }}
                                           aria-label="Delete"
-                                          disabled={isSubBusy || reorderMode}
+                                          disabled={isBusy}
                                         >
                                           <Trash2 className="h-4 w-4 text-red-500" />
                                         </Button>
                                       )}
+                                      {cat.icon && (
+                                        <span className="text-lg" aria-hidden>
+                                          {cat.icon}
+                                        </span>
+                                      )}
                                     </>
                                   )}
                                 </div>
-                              </li>
-                            );
-                          })}
-                          {subs.length === 0 && (
-                            <li className="text-sm text-muted-foreground">
-                              No subcategories.
+                              </div>
+                            </SortableRoot>
+                          </li>
+                          {isExpanded && (
+                            <li key={cat.id + "-subs"} className="-mt-2 mb-2">
+                              <SortableContext
+                                items={subs.map((s) => s.id)}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                <ul className="ml-8 border-l pl-3 space-y-1">
+                                  {subs.map((sub) => {
+                                    const isSubBusy =
+                                      loading.id === sub.id &&
+                                      loading.type !== null;
+                                    const isSubEditing =
+                                      editingSubId === sub.id;
+                                    return (
+                                      <li
+                                        key={sub.id}
+                                        className="flex items-center justify-between"
+                                      >
+                                        <SortableSub id={sub.id}>
+                                          <>
+                                            <div className="flex items-center gap-2 flex-1">
+                                              {isSubEditing ? (
+                                                <input
+                                                  className="border rounded px-2 py-1 text-sm flex-1"
+                                                  value={editingSubName}
+                                                  onChange={(e) =>
+                                                    setEditingSubName(
+                                                      e.target.value
+                                                    )
+                                                  }
+                                                  onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                  }}
+                                                  autoFocus
+                                                />
+                                              ) : (
+                                                <span className="flex-1">
+                                                  {sub.name}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-16">
+                                                {editingPosId === sub.id ? (
+                                                  <Input
+                                                    type="number"
+                                                    min={1}
+                                                    value={
+                                                      positions[sub.id] ?? ""
+                                                    }
+                                                    onChange={(e) =>
+                                                      setPos(
+                                                        sub.id,
+                                                        e.target.value
+                                                      )
+                                                    }
+                                                    onClick={(e) => {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                    }}
+                                                    onBlur={() =>
+                                                      setEditingPosId(null)
+                                                    }
+                                                    onKeyDown={(e) => {
+                                                      if (
+                                                        e.key === "Enter" ||
+                                                        e.key === "Escape"
+                                                      )
+                                                        setEditingPosId(null);
+                                                    }}
+                                                    autoFocus
+                                                  />
+                                                ) : (
+                                                  <button
+                                                    className="w-full px-2 py-1 border rounded text-sm text-muted-foreground hover:bg-muted/10"
+                                                    onClick={(e) => {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                      setEditingPosId(sub.id);
+                                                    }}
+                                                    aria-label="Edit position"
+                                                  >
+                                                    {positions[sub.id] ?? ""}
+                                                  </button>
+                                                )}
+                                              </div>
+                                              {isSubEditing ? (
+                                                <>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                      const nn =
+                                                        editingSubName.trim();
+                                                      if (!nn) return;
+                                                      void patchSubcategoryName(
+                                                        sub.id,
+                                                        nn
+                                                      );
+                                                      setEditingSubId(null);
+                                                    }}
+                                                    disabled={
+                                                      loading.type !== null
+                                                    }
+                                                  >
+                                                    Save
+                                                  </Button>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                      setEditingSubId(null);
+                                                      setEditingSubName("");
+                                                    }}
+                                                  >
+                                                    Cancel
+                                                  </Button>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={(e) => {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                      setEditingSubId(sub.id);
+                                                      setEditingSubName(
+                                                        sub.name ?? ""
+                                                      );
+                                                    }}
+                                                    aria-label="Rename"
+                                                    disabled={isSubBusy}
+                                                  >
+                                                    <Pencil className="h-4 w-4" />
+                                                  </Button>
+                                                  {confirmSubDeleteId ===
+                                                  sub.id ? (
+                                                    <>
+                                                      <Button
+                                                        variant="destructive"
+                                                        size="sm"
+                                                        onClick={(e) => {
+                                                          e.preventDefault();
+                                                          e.stopPropagation();
+                                                          void deleteSubcategory(
+                                                            sub.id
+                                                          );
+                                                        }}
+                                                        disabled={
+                                                          loading.type !== null
+                                                        }
+                                                      >
+                                                        Confirm
+                                                      </Button>
+                                                      <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={(e) => {
+                                                          e.preventDefault();
+                                                          e.stopPropagation();
+                                                          setConfirmSubDeleteId(
+                                                            null
+                                                          );
+                                                        }}
+                                                      >
+                                                        Cancel
+                                                      </Button>
+                                                    </>
+                                                  ) : (
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="icon"
+                                                      onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setConfirmSubDeleteId(
+                                                          sub.id
+                                                        );
+                                                      }}
+                                                      aria-label="Delete"
+                                                      disabled={isSubBusy}
+                                                    >
+                                                      <Trash2 className="h-4 w-4 text-red-500" />
+                                                    </Button>
+                                                  )}
+                                                  {sub.icon && (
+                                                    <span
+                                                      className="text-lg"
+                                                      aria-hidden
+                                                    >
+                                                      {sub.icon}
+                                                    </span>
+                                                  )}
+                                                </>
+                                              )}
+                                            </div>
+                                          </>
+                                        </SortableSub>
+                                      </li>
+                                    );
+                                  })}
+                                  {subs.length === 0 && (
+                                    <li className="text-sm text-muted-foreground">
+                                      No subcategories.
+                                    </li>
+                                  )}
+                                </ul>
+                              </SortableContext>
                             </li>
                           )}
-                        </ul>
-                      )}
-                    </li>
-                  );
-                })}
-                {roots.length === 0 && (
-                  <li className="py-2 text-sm text-muted-foreground">
-                    No categories.
-                  </li>
-                )}
-              </ul>
+                        </>
+                      );
+                    })}
+                    {displayRoots.length === 0 && (
+                      <li className="py-2 text-sm text-muted-foreground">
+                        No categories.
+                      </li>
+                    )}
+                  </ul>
+                </SortableContext>
+              </DndContext>
             </ScrollArea>
-          </div>
+            <div className="flex items-center gap-2 justify-end pt-4">
+              <Button
+                size="sm"
+                onClick={async () => {
+                  await saveOrder();
+                  onOpenChange(false);
+                }}
+                disabled={loading.type === "reorder-save"}
+              >
+                {loading.type === "reorder-save" ? "Saving..." : "Save order"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const reset: Record<string, number> = {};
+                  for (const c of all)
+                    reset[c.id] = Math.max(1, Math.floor(c.position ?? 1e9));
+                  setPositions(reset);
+                  setEditingPosId(null);
+                  onOpenChange(false);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </>
         )}
       </DialogContent>
     </Dialog>

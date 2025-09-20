@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest) {
 
   const { data, error } = await supabase
     .from("user_preferences")
-    .select("section_order")
+    .select("section_order, theme")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -42,19 +42,24 @@ export async function PATCH(_req: NextRequest) {
   }
 
   const body = await _req.json();
-  const { section_order } = body ?? {};
+  const { section_order, theme } = body ?? {};
 
-  if (!Array.isArray(section_order)) {
+  if (section_order !== undefined && !Array.isArray(section_order)) {
     return NextResponse.json(
       { error: "section_order must be an array" },
       { status: 400 }
     );
   }
 
-  // Upsert ensures we create the row if it doesn't exist
+  // Build upsert payload with provided fields only
+  const payload: Record<string, any> = { user_id: user.id };
+  if (section_order !== undefined) payload.section_order = section_order;
+  if (theme !== undefined) payload.theme = theme;
+
+  // Upsert ensures we create or update the row
   const { error } = await supabase
     .from("user_preferences")
-    .upsert({ user_id: user.id, section_order }, { onConflict: "user_id" });
+    .upsert(payload, { onConflict: "user_id" });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

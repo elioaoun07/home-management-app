@@ -2,7 +2,10 @@
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useCategories } from "@/features/categories/useCategoriesQuery";
+import {
+  useCategories,
+  type UICategory,
+} from "@/features/categories/useCategoriesQuery";
 import { useRef, useState } from "react";
 
 type Props = {
@@ -20,7 +23,7 @@ export default function SubcategoryGrid({
 }: Props) {
   // reuse the same categories query (already filtered by account)
   const {
-    data: categories = [],
+    data: categories = [] as UICategory[],
     isLoading,
     refetch,
   } = useCategories(accountId);
@@ -29,22 +32,68 @@ export default function SubcategoryGrid({
   // Support both DB categories (with parent_id) and default categories (with subcategories)
   let subs: any[] = [];
   if (parentCategoryId && categories.length) {
-    if ("parent_id" in categories[0]) {
-      subs = categories.filter((c: any) => c.parent_id === parentCategoryId);
+    if ("parent_id" in (categories[0] as any)) {
+      subs = (categories as any[]).filter(
+        (c: any) => c.parent_id === parentCategoryId
+      );
     } else {
-      // Find the parent and use its subcategories
-      const parent = categories.find((c: any) => c.id === parentCategoryId);
-      subs = parent?.subcategories || [];
+      // Find the parent and use its subcategories (default nested categories)
+      const parent = (categories as any[]).find(
+        (c: any) => c.id === parentCategoryId
+      );
+      subs = (
+        parent && Array.isArray(parent.subcategories)
+          ? parent.subcategories
+          : []
+      ) as any[];
     }
   }
-  // Always add a static 'Other' subcategory at the end (not in DB)
-  subs = [...subs, { id: "other", name: "Other", icon: "", color: "" }];
+  // Only add 'Other' if both account and parent category are selected
+  if (accountId && parentCategoryId) {
+    subs = [...subs, { id: "other", name: "Other", icon: "", color: "" }];
+  }
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [otherActive, setOtherActive] = useState(false);
   const [otherName, setOtherName] = useState("");
   const [otherLoading, setOtherLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  if (!accountId) {
+    return (
+      <div className="space-y-3">
+        <Label>Subcategory</Label>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <Button
+            variant="outline"
+            type="button"
+            className="justify-start opacity-50"
+            disabled
+          >
+            Select an account first
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!parentCategoryId) {
+    return (
+      <div className="space-y-3">
+        <Label>Subcategory</Label>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <Button
+            variant="outline"
+            type="button"
+            className="justify-start opacity-50"
+            disabled
+          >
+            Select a category first
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
