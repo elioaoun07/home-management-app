@@ -69,6 +69,13 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) {
+      // 👍 handle unique violation
+      if ((error as any).code === "23505") {
+        return NextResponse.json(
+          { error: "Account name already exists" },
+          { status: 409 }
+        );
+      }
       console.error("Error creating account:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }

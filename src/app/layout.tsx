@@ -3,7 +3,6 @@ import { Toaster } from "@/components/ui/sonner";
 import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "./providers";
-import QueryProvider from "./query-provider";
 
 export const metadata: Metadata = {
   title: "Home Manager • Expense",
@@ -18,14 +17,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <QueryProvider>
-          <Providers>
-            {/* User menu shown only when a session exists */}
-            <UserMenu />
-            {children}
-            <Toaster richColors closeButton />
-          </Providers>
-        </QueryProvider>
+        <Providers>
+          <UserMenu />
+          {children}
+          <Toaster richColors closeButton />
+        </Providers>
       </body>
     </html>
   );

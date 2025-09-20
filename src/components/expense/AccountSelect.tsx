@@ -1,3 +1,4 @@
+// src/components/expense/AccountSelect.tsx
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAccountsQuery } from "@/features/accounts/useAccountsQuery";
+import { useAccounts, useCreateAccount } from "@/features/accounts/hooks";
+import type { AccountType } from "@/types/domain";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -35,23 +37,22 @@ export default function AccountSelect({ value, onChange }: Props) {
     isError,
     error,
     refetch,
-  } = useAccountsQuery();
+  } = useAccounts();
+  const createAccount = useCreateAccount();
+
   const [internal, setInternal] = useState<string | undefined>(value);
   const selected = value ?? internal;
+
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newType, setNewType] = useState<"expense" | "income">("expense");
-  const [saving, setSaving] = useState(false);
+  const [newType, setNewType] = useState<AccountType>("expense");
+
+  useEffect(() => setInternal(value), [value]);
 
   const setSelected = (id: string) => {
     setInternal(id);
     onChange?.(id);
   };
-
-  useEffect(() => {
-    // Keep internal selection aligned when parent passes a new value
-    setInternal(value);
-  }, [value]);
 
   const onAddAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,35 +60,20 @@ export default function AccountSelect({ value, onChange }: Props) {
       toast.error("Please enter an account name");
       return;
     }
-    setSaving(true);
     try {
-      const res = await fetch("/api/accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), type: newType }),
+      const created = await createAccount.mutateAsync({
+        name: newName.trim(),
+        type: newType,
       });
-      if (!res.ok) {
-        let msg = "Failed to create account";
-        try {
-          const j = await res.json();
-          if (j?.error) msg = j.error;
-        } catch {}
-        toast.error(msg);
-        return;
-      }
-      const created = await res.json();
       toast.success("Account created");
-      // refresh accounts and select the new one
-      await refetch();
       setSelected(created.id);
       setAddOpen(false);
       setNewName("");
       setNewType("expense");
     } catch (err) {
-      console.error("Create account failed", err);
-      toast.error("Failed to create account");
-    } finally {
-      setSaving(false);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create account"
+      );
     }
   };
 
@@ -97,11 +83,8 @@ export default function AccountSelect({ value, onChange }: Props) {
       <Select
         value={selected}
         onValueChange={(val) => {
-          if (val === "__add__") {
-            setAddOpen(true);
-          } else {
-            setSelected(val);
-          }
+          if (val === "__add__") setAddOpen(true);
+          else setSelected(val);
         }}
         disabled={isError}
       >
@@ -149,14 +132,14 @@ export default function AccountSelect({ value, onChange }: Props) {
                 onChange={(e) => setNewName(e.target.value)}
                 autoFocus
                 required
-                disabled={saving}
+                disabled={createAccount.isPending}
               />
             </div>
             <div>
               <Label>Type</Label>
               <RadioGroup
                 value={newType}
-                onValueChange={(v) => setNewType(v as any)}
+                onValueChange={(v: AccountType) => setNewType(v)}
                 className="flex gap-6 mt-2"
               >
                 <div className="flex items-center space-x-2">
@@ -174,12 +157,12 @@ export default function AccountSelect({ value, onChange }: Props) {
                 type="button"
                 variant="outline"
                 onClick={() => setAddOpen(false)}
-                disabled={saving}
+                disabled={createAccount.isPending}
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Saving..." : "Save"}
+              <Button type="submit" disabled={createAccount.isPending}>
+                {createAccount.isPending ? "Saving..." : "Save"}
               </Button>
             </div>
           </form>

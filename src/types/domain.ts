@@ -1,12 +1,15 @@
 // src/types/domain.ts
 export type UUID = string;
 
-export interface Account {
-  id: UUID;
-  user_id: UUID;
+export type AccountType = "expense" | "income";
+
+export type Account = {
+  id: string;
+  user_id: string;
   name: string;
-  type: string;
-}
+  type: AccountType;
+  inserted_at: string; // ISO
+};
 
 export interface Category {
   id: UUID;
