@@ -2,153 +2,207 @@
 "use client";
 
 import { qk } from "@/lib/queryKeys";
-import { createClient } from "@supabase/supabase-js";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Category } from "@/types/domain";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-type Category = {
-  id: string;
-  name: string;
-  icon?: string | null;
-  color?: string | null;
-  parent_id?: string | null; // null for top-level categories
-  position?: number | null;
-  visible?: boolean | null;
-};
+// Single source of truth for the categories query
+export { useCategories } from "./useCategoriesQuery";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-// --- Queries ---
-export function useCategories(userId?: string) {
-  return useQuery({
-    queryKey: qk.categories(userId),
-    queryFn: async (): Promise<Category[]> => {
-      const { data, error } = await supabase
-        .from("user_categories")
-        .select("id,name,icon,color,parent_id,position,visible")
-        .eq("user_id", userId!); // ensure you pass userId
-      if (error) throw error;
-      // sort by position then name (consistent UI)
-      return (data ?? []).sort((a, b) => {
-        const pa = a.position ?? 9999;
-        const pb = b.position ?? 9999;
-        if (pa !== pb) return pa - pb;
-        return a.name.localeCompare(b.name);
-      });
-    },
-  });
-}
-
-// --- Mutations with optimistic UI ---
-export function useCreateCategory(userId?: string) {
+/**
+ * Create category (root or sub).
+ * Pass the accountId you’re working in; parent_id is optional (null = root).
+ */
+export function useCreateCategory(accountId?: string) {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: Omit<Category, "id">) => {
-      const { data, error } = await supabase
-        .from("user_categories")
-        .insert([{ ...input, user_id: userId }])
-        .select("id,name,icon,color,parent_id,position,visible")
-        .single();
-      if (error) throw error;
-      return data as Category;
+
+  return useMutation<
+    Category, // TData
+    Error, // TError
+    {
+      name: string;
+      parent_id?: string | null;
+      icon?: string | null;
+      color?: string | null;
+      position?: number;
+    }, // TVariables
+    { prev?: Category[]; tempId?: string } // TContext  <-- so ctx.prev is typed
+  >({
+    mutationFn: async (input) => {
+      if (!accountId) throw new Error("accountId is required");
+      const res = await fetch("/api/user-categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...input, account_id: accountId }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || "Failed to create category");
+      }
+      return (await res.json()) as Category;
     },
     onMutate: async (input) => {
-      await qc.cancelQueries({ queryKey: qk.categories(userId) });
-      const prev = qc.getQueryData<Category[]>(qk.categories(userId));
+      if (!accountId) return { prev: undefined, tempId: undefined };
+      await qc.cancelQueries({ queryKey: qk.categories(accountId) });
+      const prev = qc.getQueryData<Category[]>(qk.categories(accountId));
+
+      const tempId = `temp-${Date.now()}`;
       const optimistic: Category = {
-        id: `optimistic-${Math.random().toString(36).slice(2)}`,
-        name: input.name,
+        id: tempId,
+        user_id: "",
+        name: input.name.trim(),
         icon: input.icon ?? null,
         color: input.color ?? null,
         parent_id: input.parent_id ?? null,
         position: input.position ?? null,
-        visible: input.visible ?? true,
+        visible: true,
       };
-      qc.setQueryData<Category[]>(qk.categories(userId), (old = []) => [
+
+      qc.setQueryData<Category[]>(qk.categories(accountId), (old = []) => [
         optimistic,
         ...old,
       ]);
-      return { prev };
+
+      return { prev, tempId };
     },
-    onError: (_err, _input, ctx) => {
-      if (ctx?.prev) qc.setQueryData(qk.categories(userId), ctx.prev);
+    onError: (_err, _vars, ctx) => {
+      if (!accountId) return;
+      if (ctx?.prev) qc.setQueryData(qk.categories(accountId), ctx.prev);
+    },
+    onSuccess: (created, _vars, ctx) => {
+      if (!accountId) return;
+      qc.setQueryData<Category[]>(qk.categories(accountId), (old = []) => [
+        created,
+        ...old.filter((c) => c.id !== ctx?.tempId),
+      ]);
     },
     onSettled: () => {
-      // fetch canonical data from server
+      if (!accountId) return;
       qc.invalidateQueries({
-        queryKey: qk.categories(userId),
+        queryKey: qk.categories(accountId),
         refetchType: "active",
       });
     },
   });
 }
 
-export function useUpdateCategory(userId?: string) {
+/** Rename (works for root or sub). */
+export function useRenameCategory(accountId?: string) {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      id,
-      patch,
-    }: {
-      id: string;
-      patch: Partial<Category>;
-    }) => {
-      const { data, error } = await supabase
-        .from("user_categories")
-        .update(patch)
-        .eq("id", id)
-        .select("id,name,icon,color,parent_id,position,visible")
-        .single();
-      if (error) throw error;
-      return data as Category;
+
+  return useMutation<
+    Category, // TData
+    Error, // TError
+    { id: string; name: string }, // TVariables
+    { prev?: Category[] } // TContext
+  >({
+    mutationFn: async ({ id, name }) => {
+      const res = await fetch(`/api/categories/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return (await res.json()) as Category;
     },
-    onMutate: async ({ id, patch }) => {
-      await qc.cancelQueries({ queryKey: qk.categories(userId) });
-      const prev = qc.getQueryData<Category[]>(qk.categories(userId));
-      qc.setQueryData<Category[]>(qk.categories(userId), (old = []) =>
-        old.map((c) => (c.id === id ? { ...c, ...patch } : c))
+    onMutate: async ({ id, name }) => {
+      if (!accountId) return { prev: undefined };
+      await qc.cancelQueries({ queryKey: qk.categories(accountId) });
+      const prev = qc.getQueryData<Category[]>(qk.categories(accountId));
+      qc.setQueryData<Category[]>(qk.categories(accountId), (old = []) =>
+        old.map((c) => (c.id === id ? { ...c, name: name.trim() } : c))
       );
       return { prev };
     },
-    onError: (_e, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(qk.categories(userId), ctx.prev);
+    onError: (_e, _v, ctx) => {
+      if (!accountId) return;
+      if (ctx?.prev) qc.setQueryData(qk.categories(accountId), ctx.prev);
     },
     onSettled: () => {
+      if (!accountId) return;
       qc.invalidateQueries({
-        queryKey: qk.categories(userId),
+        queryKey: qk.categories(accountId),
         refetchType: "active",
       });
     },
   });
 }
 
-export function useDeleteCategory(userId?: string) {
+/** Delete (soft-delete via API; subs are also hidden on server). */
+export function useDeleteCategory(accountId?: string) {
   const qc = useQueryClient();
-  return useMutation({
+
+  return useMutation<
+    string, // TData (returns deleted id)
+    Error, // TError
+    string, // TVariables (id)
+    { prev?: Category[] } // TContext
+  >({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("user_categories")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await res.text());
       return id;
     },
     onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: qk.categories(userId) });
-      const prev = qc.getQueryData<Category[]>(qk.categories(userId));
-      qc.setQueryData<Category[]>(qk.categories(userId), (old = []) =>
-        old.filter((c) => c.id !== id)
+      if (!accountId) return { prev: undefined };
+      await qc.cancelQueries({ queryKey: qk.categories(accountId) });
+      const prev = qc.getQueryData<Category[]>(qk.categories(accountId));
+      // remove the category and its direct subs locally
+      qc.setQueryData<Category[]>(qk.categories(accountId), (old = []) =>
+        old.filter((c) => c.id !== id && c.parent_id !== id)
       );
       return { prev };
     },
     onError: (_e, _id, ctx) => {
-      if (ctx?.prev) qc.setQueryData(qk.categories(userId), ctx.prev);
+      if (!accountId) return;
+      if (ctx?.prev) qc.setQueryData(qk.categories(accountId), ctx.prev);
     },
     onSettled: () => {
+      if (!accountId) return;
       qc.invalidateQueries({
-        queryKey: qk.categories(userId),
+        queryKey: qk.categories(accountId),
+        refetchType: "active",
+      });
+    },
+  });
+}
+
+/** Reorder categories (roots and subs). */
+export function useReorderCategories(accountId?: string) {
+  const qc = useQueryClient();
+
+  return useMutation<
+    boolean, // TData
+    Error, // TError
+    Array<{ id: string; position: number }>, // TVariables
+    { prev?: Category[] } // TContext
+  >({
+    mutationFn: async (updates) => {
+      const res = await fetch("/api/user-categories/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return true;
+    },
+    onMutate: async (updates) => {
+      if (!accountId) return { prev: undefined };
+      await qc.cancelQueries({ queryKey: qk.categories(accountId) });
+      const prev = qc.getQueryData<Category[]>(qk.categories(accountId));
+      const map = new Map(updates.map((u) => [u.id, u.position]));
+      qc.setQueryData<Category[]>(qk.categories(accountId), (old = []) =>
+        old.map((c) => (map.has(c.id) ? { ...c, position: map.get(c.id)! } : c))
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (!accountId) return;
+      if (ctx?.prev) qc.setQueryData(qk.categories(accountId), ctx.prev);
+    },
+    onSettled: () => {
+      if (!accountId) return;
+      qc.invalidateQueries({
+        queryKey: qk.categories(accountId),
         refetchType: "active",
       });
     },

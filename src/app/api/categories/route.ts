@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest) {
 
   const { data, error } = await supabase
     .from("user_categories")
-    .select("id,name,icon,color,parent_id,position,visible")
+    .select("id,name,icon,color,parent_id,position,visible,account_id")
     .eq("user_id", user.id)
     .eq("account_id", accountId)
     .eq("visible", true)
@@ -51,6 +51,7 @@ export async function GET(_req: NextRequest) {
     color: c.color,
     parent_id: c.parent_id,
     position: c.position ?? 0,
+    account_id: c.account_id,
   }));
   return NextResponse.json(categories, {
     headers: { "Cache-Control": "no-store" },

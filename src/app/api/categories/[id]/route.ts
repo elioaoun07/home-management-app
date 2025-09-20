@@ -2,8 +2,10 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function PATCH(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
@@ -11,30 +13,25 @@ export async function PATCH(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
+  if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   const { name, visible }: { name?: string; visible?: boolean } =
-    await _req.json();
+    await req.json();
   if (!name && typeof visible === "undefined") {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
   }
 
   const updates: Record<string, any> = {};
-  if (typeof name === "string" && name.trim()) {
-    updates.name = name.trim();
-  }
-  if (typeof visible === "boolean") {
-    updates.visible = visible;
-  }
+  if (typeof name === "string" && name.trim()) updates.name = name.trim();
+  if (typeof visible === "boolean") updates.visible = visible;
 
   const { data, error } = await supabase
     .from("user_categories")
     .update(updates)
     .eq("id", id)
     .eq("user_id", user.id)
-    .select()
+    .select("id,name,icon,color,parent_id,position,visible,account_id")
     .single();
 
   if (error) {
@@ -44,7 +41,7 @@ export async function PATCH(
       { status: 500 }
     );
   }
-  return NextResponse.json(data);
+  return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function DELETE(
@@ -56,15 +53,16 @@ export async function DELETE(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
+  if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  // Soft delete: set visible=false for the category and all its children
+
+  // hide category
   const { error: err1 } = await supabase
     .from("user_categories")
     .update({ visible: false })
     .eq("user_id", user.id)
-    .in("id", [id]);
+    .eq("id", id);
+
   if (err1) {
     console.error("Soft delete category error", err1);
     return NextResponse.json(
@@ -72,12 +70,14 @@ export async function DELETE(
       { status: 500 }
     );
   }
-  // Also hide its subcategories
+
+  // hide its subs
   const { error: err2 } = await supabase
     .from("user_categories")
     .update({ visible: false })
     .eq("user_id", user.id)
     .eq("parent_id", id);
+
   if (err2) {
     console.error("Soft delete subcategories error", err2);
     return NextResponse.json(
@@ -85,5 +85,9 @@ export async function DELETE(
       { status: 500 }
     );
   }
-  return NextResponse.json({ success: true });
+
+  return NextResponse.json(
+    { success: true },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }

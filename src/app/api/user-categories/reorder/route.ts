@@ -2,6 +2,8 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const Schema = z.object({
   updates: z.array(
     z.object({
@@ -31,7 +33,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Individual updates keep it simple under RLS (id + user_id guard)
     for (const { id, position } of parsed.data.updates) {
       const { error } = await supabase
         .from("user_categories")
@@ -48,7 +49,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json(
+      { success: true },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (e) {
     console.error("Reorder error", e);
     return NextResponse.json({ error: "Unexpected error" }, { status: 500 });

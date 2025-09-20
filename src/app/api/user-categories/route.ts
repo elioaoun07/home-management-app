@@ -1,11 +1,10 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
   const supabase = supabaseServer(cookies());
   const {
     data: { user },
@@ -14,91 +13,111 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let body: any;
   try {
-    const body = await _req.json();
-    const {
-      name,
-      icon,
-      color,
-      account_id,
-      parent_id,
-      position,
-      default_category_id,
-    } = body;
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
-    if (!name || !account_id) {
-      return NextResponse.json(
-        { error: "name and account_id are required" },
-        { status: 400 }
-      );
-    }
+  const rawName = (body?.name ?? "") as string;
+  const name = rawName.trim();
+  const icon = (body?.icon ?? null) as string | null;
+  const color = (body?.color ?? null) as string | null;
+  const account_id = body?.account_id as string | undefined;
+  const parent_id = body?.parent_id ? String(body.parent_id) : null;
+  const providedPos = body?.position as number | undefined;
+  const default_category_id = (body?.default_category_id ?? null) as
+    | string
+    | null;
 
-    // Check for duplicate slug (unique per user/account)
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    const { data: existing, error: _dupError } = await supabase
+  if (!name || !account_id) {
+    return NextResponse.json(
+      { error: "name and account_id are required" },
+      { status: 400 }
+    );
+  }
+
+  // slug (unique per user/account/parent) – assuming DB trigger also maintains it
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  // Fast dup check by slug
+  const { data: existing, error: dupErr } = await supabase
+    .from("user_categories")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("account_id", account_id)
+    .eq("parent_id", parent_id)
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (dupErr) {
+    console.error("dup check error", dupErr);
+    // fall through; DB unique index (if present) will still enforce
+  }
+  if (existing) {
+    return NextResponse.json(
+      { error: "A category with this name already exists for this account." },
+      { status: 409 }
+    );
+  }
+
+  // Compute next position if not provided: max(position)+1 within same parent group
+  let position = 0;
+  if (typeof providedPos === "number" && providedPos > 0) {
+    position = Math.floor(providedPos);
+  } else {
+    const { data: maxRow, error: posErr } = await supabase
       .from("user_categories")
-      .select("id")
+      .select("position")
       .eq("user_id", user.id)
       .eq("account_id", account_id)
-      .eq("slug", slug)
+      .eq("parent_id", parent_id)
+      .order("position", { ascending: false })
+      .limit(1)
       .maybeSingle();
-    if (existing) {
+
+    if (!posErr && maxRow && typeof maxRow.position === "number") {
+      position = maxRow.position + 1;
+    } else {
+      position = 1;
+    }
+  }
+
+  const insertData = {
+    user_id: user.id,
+    name,
+    icon,
+    color,
+    account_id,
+    parent_id,
+    position,
+    visible: true,
+    default_category_id,
+  };
+
+  const { data, error } = await supabase
+    .from("user_categories")
+    .insert(insertData)
+    .select("id,name,icon,color,parent_id,position,visible,account_id")
+    .single();
+
+  if (error) {
+    if ((error as any).code === "23505") {
       return NextResponse.json(
         { error: "A category with this name already exists for this account." },
         { status: 409 }
       );
     }
-
-    const insertDataSchema = z.object({
-      user_id: z.string(),
-      name: z.string(),
-      icon: z.string().nullable(),
-      color: z.string().nullable(),
-      account_id: z.string(),
-      parent_id: z.string().nullable(),
-      position: z.number(),
-      visible: z.boolean(),
-      default_category_id: z.string().nullable(),
-      // inserted_at, updated_at, slug handled by DB
-    });
-
-    const insertData = insertDataSchema.parse({
-      user_id: user.id,
-      name,
-      icon: icon || null,
-      color: color || null,
-      account_id,
-      parent_id: parent_id || null,
-      position: typeof position === "number" ? position : 0,
-      visible: true,
-      default_category_id: default_category_id || null,
-    });
-
-    const { data, error } = await supabase
-      .from("user_categories")
-      .insert(insertData)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Error creating category:", error);
-      return NextResponse.json(
-        { error: "Failed to create category" },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(data, {
-      headers: { "Cache-Control": "no-store" },
-    });
-  } catch (err) {
-    console.error("Failed to create category:", err);
+    console.error("Error creating category:", error);
     return NextResponse.json(
       { error: "Failed to create category" },
       { status: 500 }
     );
   }
+
+  return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
 }
