@@ -44,15 +44,18 @@ export async function POST(req: NextRequest) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-  // Fast dup check by slug
-  const { data: existing, error: dupErr } = await supabase
+  // Fast dup check by slug (handle root via IS NULL)
+  let dupQuery = supabase
     .from("user_categories")
     .select("id")
     .eq("user_id", user.id)
     .eq("account_id", account_id)
-    .eq("parent_id", parent_id)
-    .eq("slug", slug)
-    .maybeSingle();
+    .eq("slug", slug) as any;
+  dupQuery =
+    parent_id === null
+      ? dupQuery.is("parent_id", null)
+      : dupQuery.eq("parent_id", parent_id);
+  const { data: existing, error: dupErr } = await dupQuery.maybeSingle();
 
   if (dupErr) {
     console.error("dup check error", dupErr);
@@ -70,12 +73,16 @@ export async function POST(req: NextRequest) {
   if (typeof providedPos === "number" && providedPos > 0) {
     position = Math.floor(providedPos);
   } else {
-    const { data: maxRow, error: posErr } = await supabase
+    let posQuery = supabase
       .from("user_categories")
       .select("position")
       .eq("user_id", user.id)
-      .eq("account_id", account_id)
-      .eq("parent_id", parent_id)
+      .eq("account_id", account_id) as any;
+    posQuery =
+      parent_id === null
+        ? posQuery.is("parent_id", null)
+        : posQuery.eq("parent_id", parent_id);
+    const { data: maxRow, error: posErr } = await posQuery
       .order("position", { ascending: false })
       .limit(1)
       .maybeSingle();

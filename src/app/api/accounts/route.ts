@@ -27,19 +27,95 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // If no accounts exist for this user, return the static defaults (not persisted)
+  // If no accounts exist for this user, seed defaults (persist to DB) and return them
   if (!data || data.length === 0) {
-    const fallback = DEFAULT_ACCOUNTS.map((a) => ({
-      id: a.id, // stable slug id; client treats as string id
-      user_id: user.id,
-      name: a.name,
-      type: a.type.toLowerCase() as "income" | "expense",
-      inserted_at: new Date().toISOString(),
-    }));
+    try {
+      for (const seed of DEFAULT_ACCOUNTS) {
+        const typeNorm = seed.type.toLowerCase() as "income" | "expense";
 
-    return NextResponse.json(fallback, {
-      headers: { "Cache-Control": "no-store" },
-    });
+        // Insert account; on unique conflict, fetch the existing id
+        let accountId: string | null = null;
+        const { data: acc, error: accErr } = await supabase
+          .from("accounts")
+          .insert({ user_id: user.id, name: seed.name, type: typeNorm })
+          .select("id,user_id,name,type,inserted_at")
+          .single();
+
+        if (accErr) {
+          if ((accErr as any).code === "23505") {
+            const { data: existing } = await supabase
+              .from("accounts")
+              .select("id")
+              .eq("user_id", user.id)
+              .eq("name", seed.name)
+              .limit(1)
+              .maybeSingle();
+            accountId = existing?.id ?? null;
+          } else {
+            throw accErr;
+          }
+        } else {
+          accountId = acc?.id ?? null;
+        }
+
+        if (!accountId)
+          throw new Error("Failed to create or resolve account id");
+
+        // Insert root categories and their subcategories for this account
+        for (const cat of seed.categories) {
+          const { data: root, error: rootErr } = await supabase
+            .from("user_categories")
+            .insert({
+              user_id: user.id,
+              account_id: accountId,
+              name: cat.name,
+              icon: cat.icon,
+              color: cat.color,
+              parent_id: null,
+              position: cat.position ?? null,
+              visible: cat.visible ?? true,
+            })
+            .select("id")
+            .single();
+          if (rootErr) throw rootErr;
+
+          if (Array.isArray(cat.subcategories) && root?.id) {
+            for (const sub of cat.subcategories) {
+              const { error: subErr } = await supabase
+                .from("user_categories")
+                .insert({
+                  user_id: user.id,
+                  account_id: accountId,
+                  name: sub.name,
+                  icon: sub.icon,
+                  color: sub.color,
+                  parent_id: root.id,
+                  position: sub.position ?? null,
+                  visible: sub.visible ?? true,
+                });
+              if (subErr) throw subErr;
+            }
+          }
+        }
+      }
+
+      // Re-read accounts after seeding and return
+      const { data: seeded, error: seededErr } = await supabase
+        .from("accounts")
+        .select("id,user_id,name,type,inserted_at")
+        .eq("user_id", user.id)
+        .order("inserted_at", { ascending: false });
+      if (seededErr) throw seededErr;
+      return NextResponse.json(seeded ?? [], {
+        headers: { "Cache-Control": "no-store" },
+      });
+    } catch (e) {
+      console.error("Seeding default accounts/categories failed:", e);
+      return NextResponse.json(
+        { error: "Failed to seed default data" },
+        { status: 500 }
+      );
+    }
   }
 
   return NextResponse.json(data, {

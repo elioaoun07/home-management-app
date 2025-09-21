@@ -49,6 +49,19 @@ export default function AccountSelect({ value, onChange }: Props) {
 
   useEffect(() => setInternal(value), [value]);
 
+  // Auto-select default account if none selected
+  useEffect(() => {
+    if (value == null && !internal && accounts.length) {
+      try {
+        const def = localStorage.getItem("default_account_id");
+        if (def && accounts.some((a) => a.id === def)) {
+          setSelected(def);
+        }
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts, value]);
+
   const setSelected = (id: string) => {
     setInternal(id);
     onChange?.(id);

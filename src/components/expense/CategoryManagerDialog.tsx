@@ -9,6 +9,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAccounts } from "@/features/accounts/hooks";
 import { useCategories } from "@/features/categories/useCategoriesQuery";
 import {
   closestCenter,
@@ -34,9 +42,10 @@ import {
   ChevronRight,
   GripVertical,
   Pencil,
+  Star,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type Props = {
@@ -60,7 +69,21 @@ export default function CategoryManagerDialog({
   accountId,
   onChange,
 }: Props) {
-  const { data: categories = [], refetch } = useCategories(accountId);
+  // Accounts for dropdown + default marker
+  const { data: accounts = [] } = useAccounts();
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(accountId);
+  useEffect(() => setSelectedAccountId(accountId), [accountId]);
+
+  // Default account handling (persist local for simplicity)
+  const [defaultAccountId, setDefaultAccountId] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("default_account_id");
+      if (v) setDefaultAccountId(v);
+    } catch {}
+  }, []);
+
+  const { data: categories = [], refetch } = useCategories(selectedAccountId);
 
   const isDbCategories =
     Array.isArray(categories) &&
@@ -424,6 +447,54 @@ export default function CategoryManagerDialog({
           <DialogTitle>Manage Categories</DialogTitle>
         </DialogHeader>
 
+        {/* Account selector + default star */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex-1">
+            <Select
+              value={selectedAccountId}
+              onValueChange={(v) => setSelectedAccountId(v)}
+            >
+              <SelectTrigger aria-label="Select account">
+                <SelectValue placeholder="Choose an account" />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <button
+            type="button"
+            className="p-2 rounded hover:bg-muted/10"
+            title={
+              defaultAccountId === selectedAccountId
+                ? "This is your default account"
+                : "Set as default account"
+            }
+            onClick={() => {
+              try {
+                localStorage.setItem("default_account_id", selectedAccountId);
+                setDefaultAccountId(selectedAccountId);
+                toast.success("Default account updated");
+              } catch {
+                toast.error("Failed to update default account");
+              }
+            }}
+            aria-label="Set as default account"
+          >
+            <Star
+              className={
+                defaultAccountId === selectedAccountId
+                  ? "h-5 w-5 text-yellow-500 fill-yellow-500"
+                  : "h-5 w-5 text-muted-foreground"
+              }
+            />
+          </button>
+        </div>
+
         {!isDbCategories ? (
           <div className="text-sm text-muted-foreground">
             You're currently using default categories. Create a custom category
@@ -453,7 +524,7 @@ export default function CategoryManagerDialog({
                         loading.id === cat.id && loading.type !== null;
                       const isEditing = editingCatId === cat.id;
                       return (
-                        <>
+                        <Fragment key={cat.id}>
                           <li key={cat.id} className="py-2">
                             <SortableRoot id={cat.id}>
                               <div className="flex items-center justify-between w-full">
@@ -843,7 +914,7 @@ export default function CategoryManagerDialog({
                               </SortableContext>
                             </li>
                           )}
-                        </>
+                        </Fragment>
                       );
                     })}
                     {displayRoots.length === 0 && (
