@@ -8,14 +8,25 @@ try {
 } catch (e) {
   // sharp not available, will fallback to resvg
 }
+let toIco = null;
+try {
+  toIco = require("to-ico");
+} catch (e) {
+  // optional
+}
 
 const root = process.cwd();
 const publicDir = path.join(root, "public");
 const srcSvg = path.join(publicDir, "appicon.svg");
 
 const outputs = [
+  { size: 16, file: "favicon-16x16.png" },
+  { size: 32, file: "favicon-32x32.png" },
+  { size: 180, file: "apple-touch-icon.png" },
   { size: 192, file: "appicon-192.png" },
   { size: 512, file: "appicon-512.png" },
+  // Maskable can reuse 512 if you don't have a special safe-zone version
+  { size: 512, file: "appicon-maskable-512.png" },
 ];
 
 async function main() {
@@ -65,6 +76,29 @@ async function main() {
   }
 
   console.log("Icon generation complete.");
+  // Create favicon.ico if possible
+  if (toIco) {
+    try {
+      const icoPath = path.join(publicDir, "favicon.ico");
+      const png16 = fs.readFileSync(path.join(publicDir, "favicon-16x16.png"));
+      const png32 = fs.readFileSync(path.join(publicDir, "favicon-32x32.png"));
+      const buf = await toIco([png16, png32]);
+      fs.writeFileSync(icoPath, buf);
+      console.log("favicon.ico generated");
+      // Also copy to app route so /favicon.ico served by app is updated
+      const appFaviconPath = path.join(root, "src", "app", "favicon.ico");
+      try {
+        fs.copyFileSync(icoPath, appFaviconPath);
+        console.log("src/app/favicon.ico updated");
+      } catch (e) {
+        console.warn("Could not update src/app/favicon.ico:", e.message);
+      }
+    } catch (e) {
+      console.warn("Could not generate favicon.ico:", e.message);
+    }
+  } else {
+    console.log("to-ico not installed, skipping favicon.ico");
+  }
 }
 
 main();
