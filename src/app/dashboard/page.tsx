@@ -1,10 +1,10 @@
-import TransactionsTable from "@/components/dashboard/TransactionsTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabaseServer } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import DashboardClient from "./DashboardClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -61,7 +61,7 @@ export default async function DashboardPage({
     .eq("user_id", user.id)
     .gte("date", start)
     .lte("date", end)
-    .order("date", { ascending: false })
+    .order("inserted_at", { ascending: false })
     .limit(200);
 
   if (error) {
@@ -91,7 +91,7 @@ export default async function DashboardPage({
         </form>
       </div>
 
-      <TransactionsTable
+      <DashboardClient
         rows={(transactions as Tx[]) ?? []}
         start={start}
         end={end}

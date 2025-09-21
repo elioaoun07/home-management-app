@@ -148,44 +148,72 @@ export async function PATCH(req: NextRequest) {
       updateFields.description = description ?? "";
     }
 
-    // Handle category/subcategory updates by resolving names
-    if (category_id !== undefined) {
-      if (category_id === null || category_id === "") {
-        updateFields.category = null;
-      } else {
-        const { data: cat, error: catErr } = await supabase
+    // Handle category/subcategory updates by resolving names. Accept both UUIDs and default seed IDs.
+    const isUuid = (v: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        v
+      );
+
+    // Helper to resolve a category name by id which may be a UUID or a default seed id.
+    const resolveCategoryName = async (idOrSeed: string) => {
+      if (isUuid(idOrSeed)) {
+        const { data, error } = await supabase
           .from("user_categories")
           .select("name")
-          .eq("id", category_id)
+          .eq("id", idOrSeed)
           .eq("user_id", user.id)
           .single();
-        if (catErr) {
+        if (error || !data) return null;
+        return data.name as string;
+      }
+      // For seed ids, attempt to find matching name from DEFAULT_ACCOUNTS
+      try {
+        const { DEFAULT_ACCOUNTS } = await import(
+          "@/constants/defaultCategories"
+        );
+        for (const acc of DEFAULT_ACCOUNTS) {
+          for (const cat of acc.categories) {
+            if (cat.id === idOrSeed) return cat.name;
+            for (const sub of cat.subcategories ?? []) {
+              if (sub.id === idOrSeed) return sub.name;
+            }
+          }
+        }
+      } catch {}
+      return null;
+    };
+
+    if (category_id !== undefined) {
+      if (category_id === null || category_id === "") {
+        updateFields.category = "";
+        // When clearing category, also clear subcategory if not explicitly set
+        if (subcategory_id === undefined) updateFields.subcategory = "";
+      } else {
+        const name = await resolveCategoryName(String(category_id));
+        if (!name) {
           return NextResponse.json(
             { error: "Invalid category_id" },
             { status: 400 }
           );
         }
-        updateFields.category = cat.name;
+        updateFields.category = name;
+        // If category changes and subcategory not provided, clear subcategory as it may no longer be valid
+        if (subcategory_id === undefined) updateFields.subcategory = "";
       }
     }
 
     if (subcategory_id !== undefined) {
       if (subcategory_id === null || subcategory_id === "") {
-        updateFields.subcategory = null;
+        updateFields.subcategory = "";
       } else {
-        const { data: sub, error: subErr } = await supabase
-          .from("user_categories")
-          .select("name")
-          .eq("id", subcategory_id)
-          .eq("user_id", user.id)
-          .single();
-        if (subErr) {
+        const name = await resolveCategoryName(String(subcategory_id));
+        if (!name) {
           return NextResponse.json(
             { error: "Invalid subcategory_id" },
             { status: 400 }
           );
         }
-        updateFields.subcategory = sub.name;
+        updateFields.subcategory = name;
       }
     }
 

@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "dev:3000": "next dev --turbopack -p 3000",
     "build": "next build --turbopack --no-lint",
-    "start": "next start",
+    "start": "next start -p 3000",
     "lint": "eslint",
     "icons": "node scripts/generate-icons.cjs",
     "prepare": "husky install"
