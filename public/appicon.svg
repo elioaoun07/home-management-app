@@ -1,23 +1,21 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg-gradient" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4F8A8B"/>
-      <stop offset="1" stop-color="#C0DFD9"/>
-    </linearGradient>
-    <linearGradient id="coin-gradient" x1="128" y1="60" x2="128" y2="196" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFD700"/>
-      <stop offset="1" stop-color="#FFB300"/>
-    </linearGradient>
-    <filter id="shadow" x="0" y="0" width="256" height="256" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000" flood-opacity="0.15"/>
-    </filter>
-  </defs>
-  <rect width="256" height="256" rx="56" fill="url(#bg-gradient)"/>
-  <g filter="url(#shadow)">
-    <ellipse cx="128" cy="128" rx="68" ry="68" fill="url(#coin-gradient)"/>
-    <ellipse cx="128" cy="128" rx="60" ry="60" fill="#FFF9E3"/>
-    <ellipse cx="128" cy="128" rx="48" ry="48" fill="url(#coin-gradient)" opacity="0.85"/>
-    <text x="128" y="144" text-anchor="middle" font-size="56" font-family="Segoe UI, Arial, sans-serif" font-weight="bold" fill="#4F8A8B" letter-spacing="-2">₡</text>
-  </g>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="App Icon: Dollar">
+	<!-- Background rounded square -->
+	<defs>
+		<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+			<stop offset="0%" stop-color="#22c55e"/>
+			<stop offset="100%" stop-color="#16a34a"/>
+		</linearGradient>
+	</defs>
+	<rect x="32" y="32" width="448" height="448" rx="96" fill="url(#bg)"/>
+
+	<!-- Dollar symbol -->
+	<text
+		x="256"
+		y="310"
+		text-anchor="middle"
+		font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif"
+		font-size="300"
+		font-weight="800"
+		fill="#ffffff"
+	>$</text>
 </svg>
