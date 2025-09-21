@@ -6,16 +6,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+// Page component: wraps the part that reads search params in <Suspense>
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" aria-busy="true" />}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+// Inner component: actually uses useSearchParams (now inside Suspense)
+function LoginContent() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const searchParams = useSearchParams();
 
-  // Show a clear error based on server redirect (?error=...)
+  const searchParams = useSearchParams();
   const errorParam = searchParams.get("error");
+
   useEffect(() => {
     if (!errorParam) return;
     const message =
@@ -24,25 +34,22 @@ export default function LoginPage() {
         : errorParam === "invalid"
           ? "Invalid email or password."
           : "Something went wrong. Please try again.";
-    // Visible toast
     toast.error(message);
   }, [errorParam]);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
-    // If fields are empty, prevent the normal form submission and show toast.
     if (!username.trim() || !password) {
       e.preventDefault();
       toast.error("Please enter username and password");
       return;
     }
-    // Allow the browser to submit the form normally. The server will set cookies
-    // and respond with an HTTP redirect which the browser will follow.
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <Card className="w-full max-w-md p-6">
         <h2 className="text-lg font-semibold mb-4">Sign in</h2>
+
         {errorParam && (
           <div
             role="alert"
@@ -54,6 +61,7 @@ export default function LoginPage() {
               "Something went wrong. Please try again."}
           </div>
         )}
+
         <form
           onSubmit={submit}
           action="/api/auth/login"
