@@ -4,15 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calculator } from "lucide-react";
-import { useState } from "react";
+import { ReactNode, useState } from "react";
 import CalculatorDialog from "./CalculatorDialog";
 
 type Props = {
   value?: string;
   onChange?: (value: string) => void;
+  rightExtra?: ReactNode; // Optional extra control (e.g., voice entry)
 };
 
-export default function AmountInput({ value, onChange }: Props) {
+export default function AmountInput({ value, onChange, rightExtra }: Props) {
   const [isCalcOpen, setCalcOpen] = useState(false);
 
   return (
@@ -36,6 +37,7 @@ export default function AmountInput({ value, onChange }: Props) {
         >
           <Calculator className="h-4 w-4" />
         </Button>
+        {rightExtra}
       </div>
 
       <CalculatorDialog

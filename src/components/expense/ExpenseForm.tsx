@@ -3,6 +3,8 @@
 import { useSectionOrder } from "@/features/preferences/useSectionOrder";
 import TemplateQuickEntryButton, { Template } from "./TemplateQuickEntryButton";
 
+import { useCategories } from "@/features/categories/useCategoriesQuery";
+import { parseSpeechExpense } from "@/lib/nlp/speechExpense";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
 import AccountSelect from "./AccountSelect";
@@ -11,6 +13,7 @@ import AmountInput from "./AmountInput";
 import CategoryGrid from "./CategoryGrid";
 import DescriptionField from "./DescriptionField";
 import SubcategoryGrid from "./SubcategoryGrid";
+import VoiceEntryButton from "./VoiceEntryButton";
 
 const SECTION_KEYS = [
   "account",
@@ -32,11 +35,58 @@ export default function ExpenseForm() {
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>();
   const [amount, setAmount] = useState<string>("");
   const [description, setDescription] = useState<string>("");
+  const [pendingSentence, setPendingSentence] = useState<string | null>(null);
 
-  // When category changes, clear subcategory
+  // Categories for NLP matching
+  const { data: categories = [] } = useCategories(selectedAccountId);
+
+  // Helper: get parent category id for a subcategory
+  const getParentForSub = (subId?: string) => {
+    if (!subId) return undefined;
+    // DB-flat: find item with this id and read parent_id
+    for (const c of categories as any[]) {
+      if (c && c.id === subId) {
+        if ("parent_id" in c && c.parent_id) return c.parent_id as string;
+        break;
+      }
+    }
+    // Nested default: search subcategories
+    for (const c of categories as any[]) {
+      if (c?.subcategories) {
+        const hit = c.subcategories.find((s: any) => s.id === subId);
+        if (hit) return c.id as string;
+      }
+    }
+    return undefined;
+  };
+
+  // When category changes, clear subcategory only if it doesn't belong to the new category
   useEffect(() => {
-    setSelectedSubcategoryId(undefined);
-  }, [selectedCategoryId]);
+    if (!selectedCategoryId) {
+      setSelectedSubcategoryId(undefined);
+      return;
+    }
+    if (!selectedSubcategoryId) return;
+    const parentId = getParentForSub(selectedSubcategoryId);
+    if (parentId && parentId !== selectedCategoryId) {
+      setSelectedSubcategoryId(undefined);
+    }
+  }, [selectedCategoryId, selectedSubcategoryId, categories]);
+
+  // If we spoke while categories were still loading, re-parse when they arrive
+  useEffect(() => {
+    if (!pendingSentence) return;
+    if (!categories || (categories as any[]).length === 0) return;
+    const reparsed = parseSpeechExpense(pendingSentence, categories);
+    if (reparsed.categoryId) setSelectedCategoryId(reparsed.categoryId);
+    if (reparsed.subcategoryId)
+      setSelectedSubcategoryId(reparsed.subcategoryId);
+    if (reparsed.amount != null && !isNaN(reparsed.amount)) {
+      // don’t override if user already typed an amount
+      setAmount((prev) => (prev ? prev : String(reparsed.amount)));
+    }
+    if (reparsed.categoryId || reparsed.subcategoryId) setPendingSentence(null);
+  }, [pendingSentence, categories]);
 
   // Check if form is valid for submission
   const isFormValid =
@@ -113,7 +163,28 @@ export default function ExpenseForm() {
           key="subcategory"
         />
       ),
-      amount: <AmountInput value={amount} onChange={setAmount} key="amount" />,
+      amount: (
+        <AmountInput
+          value={amount}
+          onChange={setAmount}
+          rightExtra={
+            <VoiceEntryButton
+              categories={categories}
+              onPreviewChange={() => {}}
+              onParsed={({ sentence, amount, categoryId, subcategoryId }) => {
+                setDescription(`[Speech] ${sentence}`);
+                if (amount != null && !isNaN(amount)) setAmount(String(amount));
+                if (categoryId) setSelectedCategoryId(categoryId);
+                if (subcategoryId) setSelectedSubcategoryId(subcategoryId);
+                // If nothing matched, queue re-parse once categories ready
+                if (!categoryId && !subcategoryId) setPendingSentence(sentence);
+              }}
+              variant="icon"
+            />
+          }
+          key="amount"
+        />
+      ),
       description: (
         <DescriptionField
           value={description}
@@ -128,6 +199,7 @@ export default function ExpenseForm() {
       selectedSubcategoryId,
       amount,
       description,
+      // speechPreview removed as per patch
     ]
   );
 
@@ -152,6 +224,7 @@ export default function ExpenseForm() {
           <section key={section}>{sectionComponents[section]}</section>
         ))
       )}
+      {/* Voice button moved next to Amount input */}
       <section>
         <AddExpenseButton disabled={!isFormValid} onSubmit={handleSubmit} />
       </section>
@@ -162,4 +235,26 @@ export default function ExpenseForm() {
       />
     </div>
   );
+}
+
+// Re-parse pending sentence whenever categories become available
+// Placed after component to keep body above readable
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function useReparseOnCategories(
+  pendingSentence: string | null,
+  categories: any[],
+  setters: {
+    setSelectedCategoryId: (id?: string) => void;
+    setSelectedSubcategoryId: (id?: string) => void;
+    setAmount: (v: string) => void;
+    clearPending: () => void;
+  }
+) {
+  const {
+    setSelectedCategoryId,
+    setSelectedSubcategoryId,
+    setAmount,
+    clearPending,
+  } = setters;
+  // Use an effect in the main component instead; this is a placeholder to signal intent.
 }
