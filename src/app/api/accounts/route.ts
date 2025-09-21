@@ -1,3 +1,4 @@
+import { DEFAULT_ACCOUNTS } from "@/constants/defaultCategories";
 import { supabaseServer } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
@@ -26,7 +27,22 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data ?? [], {
+  // If no accounts exist for this user, return the static defaults (not persisted)
+  if (!data || data.length === 0) {
+    const fallback = DEFAULT_ACCOUNTS.map((a) => ({
+      id: a.id, // stable slug id; client treats as string id
+      user_id: user.id,
+      name: a.name,
+      type: a.type.toLowerCase() as "income" | "expense",
+      inserted_at: new Date().toISOString(),
+    }));
+
+    return NextResponse.json(fallback, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  return NextResponse.json(data, {
     headers: { "Cache-Control": "no-store" },
   });
 }

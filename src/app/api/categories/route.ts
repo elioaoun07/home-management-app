@@ -1,3 +1,4 @@
+import { DEFAULT_ACCOUNTS } from "@/constants/defaultCategories";
 import { supabaseServer } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
@@ -19,6 +20,25 @@ export async function GET(_req: NextRequest) {
       { error: "accountId is required" },
       { status: 400 }
     );
+
+  // If accountId is a non-UUID (e.g., "acc-salary"/"acc-wallet" from defaults),
+  // return the static categories directly and skip DB lookup.
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      accountId
+    );
+  if (!isUuid) {
+    const seed = DEFAULT_ACCOUNTS.find((a) => a.id === accountId);
+    if (seed) {
+      return NextResponse.json(seed.categories ?? [], {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+    // Unknown non-UUID account id: return empty so client can decide fallback
+    return NextResponse.json([], {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
 
   const { data, error } = await supabase
     .from("user_categories")
