@@ -2,7 +2,8 @@
   "name": "Home Manager",
   "short_name": "HomeManager",
   "description": "Track expenses, recipes, and manage your home in one place.",
-  "start_url": "/",
+  "start_url": "/login",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
@@ -24,6 +25,17 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quick Expense",
+      "short_name": "Quick Expense",
+      "url": "/quick-expense",
+      "description": "Add an expense quickly",
+      "icons": [
+        { "src": "/appicon-192.png", "sizes": "192x192", "type": "image/png" }
+      ]
     }
   ]
 }
