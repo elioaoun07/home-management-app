@@ -25,8 +25,8 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Return { section_order: [...] | null } — client handles fallback/defaults
-  return NextResponse.json(data ?? { section_order: null }, {
+  // Always return both keys, let client handle defaulting
+  return NextResponse.json(data ?? { section_order: null, theme: null }, {
     headers: { "Cache-Control": "no-store" },
   });
 }
@@ -54,7 +54,11 @@ export async function PATCH(_req: NextRequest) {
   // Build upsert payload with provided fields only
   const payload: Record<string, any> = { user_id: user.id };
   if (section_order !== undefined) payload.section_order = section_order;
-  if (theme !== undefined) payload.theme = theme;
+  if (theme !== undefined) {
+    // Only allow 'light' | 'dark'. Anything else becomes null (system default)
+    const t = theme === "light" || theme === "dark" ? theme : null;
+    payload.theme = t;
+  }
 
   // Upsert ensures we create or update the row
   const { error } = await supabase

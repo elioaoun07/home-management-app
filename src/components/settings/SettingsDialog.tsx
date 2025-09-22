@@ -13,8 +13,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePreferences } from "@/features/preferences/usePreferences";
 import {
-  usePreferenceTheme,
   useSectionOrder,
   useUpdatePreferences,
   type SectionKey,
@@ -40,7 +40,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { RotateCcw, Save } from "lucide-react";
-import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SortableItem } from "./SortableItem";
 
@@ -58,11 +57,11 @@ const SECTION_LABELS: Record<SectionKey, string> = {
 };
 
 export function SettingsDialog({ open, onOpenChange }: Props) {
-  const { theme, setTheme } = useTheme();
+  const { theme, updateTheme } = usePreferences();
 
   // Section order state
   const { data: serverOrderArray } = useSectionOrder();
-  const { data: serverTheme } = usePreferenceTheme();
+  // Theme is handled via usePreferences(); no separate theme query
   const initialOrder = Array.isArray(serverOrderArray) ? serverOrderArray : [];
   const [order, setOrder] = useState<SectionKey[]>(() =>
     initialOrder.length ? initialOrder : []
@@ -74,14 +73,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
   useEffect(() => {
     if (Array.isArray(serverOrderArray) && open)
       setOrder(serverOrderArray as SectionKey[]);
-    if (serverTheme && open) {
-      try {
-        setTheme(serverTheme as string);
-      } catch (e) {
-        /* ignore */
-      }
-    }
-  }, [serverOrderArray, serverTheme, open]);
+  }, [serverOrderArray, open]);
 
   const canSave = useMemo(() => {
     const so = Array.isArray(serverOrderArray) ? serverOrderArray : null;
@@ -120,7 +112,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
 
   async function handleSave() {
     try {
-      await updatePreferences.mutateAsync({ section_order: order, theme });
+      await updatePreferences.mutateAsync({ section_order: order });
     } catch (e) {
       // Swallow; toast could be added later
       console.error(e);
@@ -181,8 +173,8 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                 </p>
               </div>
               <RadioGroup
-                value={(theme as string) ?? "system"}
-                onValueChange={(v) => setTheme(v)}
+                value={theme}
+                onValueChange={(v) => updateTheme(v as any)}
                 className="grid grid-cols-3 gap-3"
               >
                 {[

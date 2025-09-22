@@ -30,6 +30,29 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
+        {/* Early theme apply to avoid flash of incorrect theme */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(){
+                try {
+                  var stored = localStorage.getItem('hm-theme');
+                  var theme = stored || 'system';
+                  var d = document.documentElement;
+                  if (theme === 'system') {
+                    var m = window.matchMedia('(prefers-color-scheme: dark)');
+                    if (m.matches) d.classList.add('dark');
+                    else d.classList.remove('dark');
+                  } else if (theme === 'dark') {
+                    d.classList.add('dark');
+                  } else {
+                    d.classList.remove('dark');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
         <Providers>
           <UserMenu />
           {children}

@@ -78,6 +78,9 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         if (nextUserId !== currentUserId) {
           try {
             localStorage.removeItem(RQ_PERSIST_KEY);
+            // Clear local user preferences and theme on user switch
+            localStorage.removeItem("user_preferences");
+            localStorage.removeItem("hm-theme");
           } catch {}
           queryClient.clear();
           currentUserId = nextUserId;
