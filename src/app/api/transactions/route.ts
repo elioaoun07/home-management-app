@@ -16,8 +16,14 @@ export async function POST(_req: NextRequest) {
 
   try {
     const body = await _req.json();
-    const { account_id, category_id, subcategory_id, amount, description } =
-      body;
+    const {
+      account_id,
+      category_id,
+      subcategory_id,
+      amount,
+      description,
+      date,
+    } = body;
 
     // Validate required fields
     if (!account_id || !category_id || !amount) {
@@ -63,10 +69,20 @@ export async function POST(_req: NextRequest) {
       subcategoryName = subcategoryData.name;
     }
 
+    // Determine date: accept optional YYYY-MM-DD, default to today
+    let txDate: string;
+    if (typeof date === "string") {
+      const valid =
+        /^\d{4}-\d{2}-\d{2}$/.test(date) && !isNaN(Date.parse(date));
+      txDate = valid ? date : new Date().toISOString().split("T")[0];
+    } else {
+      txDate = new Date().toISOString().split("T")[0];
+    }
+
     // Create transaction
     const transactionData = {
       user_id: user.id,
-      date: new Date().toISOString().split("T")[0], // Current date in YYYY-MM-DD format
+      date: txDate, // YYYY-MM-DD
       category: categoryData.name,
       subcategory: subcategoryName,
       amount: parseFloat(amount),

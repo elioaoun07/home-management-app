@@ -27,10 +27,12 @@ export default function TemplateQuickEntryButton({
   onTemplateSelect,
   onCreateTemplate,
   onEditTemplate,
+  selectedDate,
 }: {
   onTemplateSelect: (template: Template) => void;
   onCreateTemplate: () => void;
   onEditTemplate: (template: Template) => void;
+  selectedDate?: string; // YYYY-MM-DD
 }) {
   const [open, setOpen] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -268,6 +270,7 @@ export default function TemplateQuickEntryButton({
                       subcategory_id: quickEdit.subcategory_id,
                       amount: quickEditAmount,
                       description: quickEditDescription,
+                      date: selectedDate,
                     }),
                   });
                   if (!res.ok) {

@@ -3,8 +3,17 @@
 import { useSectionOrder } from "@/features/preferences/useSectionOrder";
 import TemplateQuickEntryButton, { Template } from "./TemplateQuickEntryButton";
 
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useCategories } from "@/features/categories/useCategoriesQuery";
 import { parseSpeechExpense } from "@/lib/nlp/speechExpense";
+import { cn } from "@/lib/utils";
+import { CalendarDays } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
 import AccountSelect from "./AccountSelect";
@@ -36,6 +45,27 @@ export default function ExpenseForm() {
   const [amount, setAmount] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [pendingSentence, setPendingSentence] = useState<string | null>(null);
+  const [date, setDate] = useState<Date>(new Date());
+
+  const yyyyMmDd = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const humanDate = (d: Date) => {
+    const today = new Date();
+    const tKey = yyyyMmDd(today);
+    const dKey = yyyyMmDd(d);
+    // Yesterday label
+    const yest = new Date();
+    yest.setDate(today.getDate() - 1);
+    const yKey = yyyyMmDd(yest);
+    if (dKey === tKey) return "Today";
+    if (dKey === yKey) return "Yesterday";
+    return d.toLocaleDateString();
+  };
 
   // Categories for NLP matching
   const { data: categories = [] } = useCategories(selectedAccountId);
@@ -110,6 +140,7 @@ export default function ExpenseForm() {
           subcategory_id: selectedSubcategoryId || null,
           amount: amount,
           description: description,
+          date: yyyyMmDd(date),
         }),
       });
 
@@ -129,6 +160,7 @@ export default function ExpenseForm() {
       setSelectedSubcategoryId(undefined);
       setAmount("");
       setDescription("");
+      // Keep the selected date to allow entering multiple backdated expenses
     } catch (error) {
       console.error("Error creating transaction:", error);
       toast.error(
@@ -215,7 +247,57 @@ export default function ExpenseForm() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Quick Expense</h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Quick Expense
+          </h1>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "h-9 gap-2",
+                  // Make button compact on small screens
+                  "sm:h-10"
+                )}
+                aria-label="Select date"
+              >
+                <CalendarDays className="size-4" />
+                <span className="text-sm">{humanDate(date)}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <div className="p-3">
+                <Calendar
+                  mode="single"
+                  selected={date}
+                  onSelect={(d) => d && setDate(d)}
+                  initialFocus
+                />
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDate(new Date())}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const y = new Date();
+                      y.setDate(y.getDate() - 1);
+                      setDate(y);
+                    }}
+                  >
+                    Yesterday
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </header>
       {sectionOrderLoading ? (
         <div>Loading preferences...</div>
@@ -232,6 +314,7 @@ export default function ExpenseForm() {
         onTemplateSelect={handleTemplateSelect}
         onCreateTemplate={() => {}}
         onEditTemplate={() => {}}
+        selectedDate={yyyyMmDd(date)}
       />
     </div>
   );
