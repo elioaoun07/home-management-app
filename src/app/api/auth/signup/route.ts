@@ -7,18 +7,21 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get("content-type") || "";
     let email: string | undefined;
     let password: string | undefined;
+    let name: string | undefined;
 
     if (contentType.includes("application/json")) {
       const body = await req.json();
       email = body.email;
       password = body.password;
+      name = body.name;
     } else {
       const form = await req.formData();
       email = form.get("email") as string | undefined;
       password = form.get("password") as string | undefined;
+      name = form.get("name") as string | undefined;
     }
 
-    if (!email || !password) {
+    if (!email || !password || !name) {
       return NextResponse.redirect(
         new URL("/signup?error=missing", req.url),
         303
@@ -30,6 +33,12 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: name,
+          name,
+        },
+      },
     } as any);
 
     if (error) {
@@ -38,6 +47,19 @@ export async function POST(req: NextRequest) {
         new URL(`/signup?error=${encodeURIComponent(error.message)}`, req.url),
         303
       );
+    }
+
+    // If the user is created and session is available (auto-confirm), also update profile name
+    try {
+      const userId = data.user?.id;
+      if (userId) {
+        const { error: updErr } = await supabase.auth.updateUser({
+          data: { full_name: name, name },
+        } as any);
+        if (updErr) console.warn("Post-signup updateUser warning:", updErr);
+      }
+    } catch (e) {
+      // Non-fatal, metadata is already set on signUp options
     }
 
     // Redirect to login with a success message (Supabase may send confirmation email)

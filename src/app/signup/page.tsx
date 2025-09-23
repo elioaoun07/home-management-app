@@ -9,13 +9,14 @@ import React, { useState } from "react";
 import { toast } from "sonner";
 
 export default function SignupPage() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
-    if (!email.trim() || !password) {
+    if (!name.trim() || !email.trim() || !password) {
       e.preventDefault();
-      toast.error("Please enter email and password");
+      toast.error("Please enter name, email, and password");
       return;
     }
   }
@@ -30,6 +31,16 @@ export default function SignupPage() {
           method="post"
           className="space-y-4"
         >
+          <div>
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              name="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+            />
+          </div>
           <div>
             <Label htmlFor="email">Email</Label>
             <Input
