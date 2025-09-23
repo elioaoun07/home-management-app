@@ -1,3 +1,4 @@
+import DateSettings from "@/components/dashboard/DateSettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +30,29 @@ function fmtDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function startOfCustomMonth(date: Date, monthStartDay: number) {
+  const d = new Date(date);
+  const currentDay = d.getDate();
+  const s = new Date(d);
+  if (currentDay >= monthStartDay) {
+    s.setDate(monthStartDay);
+  } else {
+    s.setMonth(s.getMonth() - 1);
+    s.setDate(monthStartDay);
+  }
+  s.setHours(0, 0, 0, 0);
+  return s;
+}
+
+function parseMonthStartDay(dateStart?: string): number | null {
+  if (!dateStart || typeof dateStart !== "string") return null;
+  const m = dateStart.match(/^(sun|mon)-(\d{1,2})$/);
+  if (!m) return null;
+  const day = Number(m[2]);
+  if (!Number.isInteger(day) || day < 1 || day > 28) return null;
+  return day;
+}
+
 export default async function DashboardPage({
   searchParams: searchParamsPromise,
 }: {
@@ -55,11 +79,27 @@ export default async function DashboardPage({
     redirect("/welcome");
   }
 
-  // Defaults: current month (from the 1st to today)
+  // Defaults respect user's custom month-start preference
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const defaultStart = fmtDate(startOfMonth);
-  const defaultEnd = fmtDate(now);
+  let monthStartDay = 1;
+  // Fetch preference (best-effort)
+  const { data: prefsRow } = await supabase
+    .from("user_preferences")
+    .select("date_start")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const parsedDay = parseMonthStartDay(prefsRow?.date_start as any);
+  if (parsedDay) monthStartDay = parsedDay;
+
+  const sCustom = startOfCustomMonth(now, monthStartDay);
+  // End of the current custom month period is the day before next period start
+  const nextPeriod = new Date(sCustom);
+  nextPeriod.setMonth(nextPeriod.getMonth() + 1);
+  nextPeriod.setDate(monthStartDay);
+  const endOfPeriod = new Date(nextPeriod);
+  endOfPeriod.setDate(endOfPeriod.getDate() - 1);
+  const defaultStart = fmtDate(sCustom);
+  const defaultEnd = fmtDate(endOfPeriod);
 
   const sp = await searchParamsPromise;
   const start = (typeof sp?.start === "string" && sp.start) || defaultStart;
@@ -160,6 +200,8 @@ export default async function DashboardPage({
           <Button type="button" variant="ghost" asChild>
             <Link href="/dashboard">Reset</Link>
           </Button>
+          {/* Date settings icon */}
+          <DateSettings />
         </form>
       </div>
 

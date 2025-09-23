@@ -4,7 +4,7 @@ import TransactionsTable, {
   Tx,
 } from "@/components/dashboard/TransactionsTable";
 import { Button } from "@/components/ui/button";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Props = {
   rows: Tx[];
@@ -23,6 +23,11 @@ type Patch = Partial<{
 
 export default function DashboardClient({ rows, start, end, showUser }: Props) {
   const [tableRows, setTableRows] = useState<Tx[]>(rows);
+  const [allRows] = useState<Tx[]>(rows); // immutable snapshot of initial server rows for fast client filtering
+  const [range, setRange] = useState<{ start: string; end: string }>({
+    start,
+    end,
+  });
   const [pending, setPending] = useState<Record<string, Patch>>({});
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -32,6 +37,68 @@ export default function DashboardClient({ rows, start, end, showUser }: Props) {
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
 
   const dirtyIds = useMemo(() => new Set(Object.keys(pending)), [pending]);
+  // Listen for quick view range changes and filter locally without reload
+  useEffect(() => {
+    function onSetRange(e: Event) {
+      const detail = (e as CustomEvent).detail as {
+        start?: string;
+        end?: string;
+      };
+      if (!detail?.start || !detail?.end) return;
+      setRange({ start: detail.start, end: detail.end });
+      const s = detail.start;
+      const eStr = detail.end;
+      setTableRows(allRows.filter((r) => r.date >= s && r.date <= eStr));
+      // Also reflect in the page URL inputs if present (optional; form owns defaults)
+      const startInput = document.getElementById(
+        "start"
+      ) as HTMLInputElement | null;
+      const endInput = document.getElementById(
+        "end"
+      ) as HTMLInputElement | null;
+      if (startInput) startInput.value = s;
+      if (endInput) endInput.value = eStr;
+    }
+    window.addEventListener("dashboard:setRange", onSetRange as any);
+    return () =>
+      window.removeEventListener("dashboard:setRange", onSetRange as any);
+  }, [allRows]);
+
+  // Enhance native date inputs to filter instantly on change
+  useEffect(() => {
+    const startInput = document.getElementById(
+      "start"
+    ) as HTMLInputElement | null;
+    const endInput = document.getElementById("end") as HTMLInputElement | null;
+    if (!startInput || !endInput) return;
+
+    const handler = () => {
+      const s = startInput.value || range.start;
+      const e = endInput.value || range.end;
+      if (!s || !e) return;
+      setRange({ start: s, end: e });
+      setTableRows(allRows.filter((r) => r.date >= s && r.date <= e));
+      // Update URL without reload for shareability
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("start", s);
+        url.searchParams.set("end", e);
+        window.history.replaceState({}, "", url.toString());
+      } catch {}
+    };
+
+    startInput.addEventListener("change", handler);
+    endInput.addEventListener("change", handler);
+    startInput.addEventListener("input", handler);
+    endInput.addEventListener("input", handler);
+
+    return () => {
+      startInput.removeEventListener("change", handler);
+      endInput.removeEventListener("change", handler);
+      startInput.removeEventListener("input", handler);
+      endInput.removeEventListener("input", handler);
+    };
+  }, [allRows, range.start, range.end]);
 
   const handleDeferredChange = (updatedRow: Tx, patch: Patch) => {
     setTableRows((prev) =>
