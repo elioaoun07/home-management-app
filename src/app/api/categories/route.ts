@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic"; // no caching
 
 export async function GET(_req: NextRequest) {
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const accountId = _req.nextUrl.searchParams.get("accountId") ?? "";
 
   const {

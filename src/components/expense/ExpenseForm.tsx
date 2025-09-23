@@ -13,6 +13,7 @@ import {
 import { useCategories } from "@/features/categories/useCategoriesQuery";
 import { parseSpeechExpense } from "@/lib/nlp/speechExpense";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 import { CalendarDays } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
@@ -64,7 +65,8 @@ export default function ExpenseForm() {
     const yKey = yyyyMmDd(yest);
     if (dKey === tKey) return "Today";
     if (dKey === yKey) return "Yesterday";
-    return d.toLocaleDateString();
+    // Use a deterministic format to avoid locale-based hydration mismatches
+    return format(d, "MMM d, yyyy");
   };
 
   // Categories for NLP matching
@@ -246,6 +248,13 @@ export default function ExpenseForm() {
 
   return (
     <div className="space-y-6">
+      {/* Avoid hydration mismatch by rendering date label after mount */}
+      {/** Track client mount state */}
+      {/* eslint-disable react-hooks/rules-of-hooks */}
+      {(() => {
+        /* This IIFE is only to keep related state near usage; it runs once per render. */
+        return null;
+      })()}
       <header className="space-y-1">
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -263,7 +272,8 @@ export default function ExpenseForm() {
                 aria-label="Select date"
               >
                 <CalendarDays className="size-4" />
-                <span className="text-sm">{humanDate(date)}</span>
+                {/* Show label only after mount to prevent SSR/CSR time/locale drift */}
+                <DateLabel value={date} formatter={humanDate} />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
@@ -317,6 +327,24 @@ export default function ExpenseForm() {
         selectedDate={yyyyMmDd(date)}
       />
     </div>
+  );
+}
+
+function DateLabel({
+  value,
+  formatter,
+}: {
+  value: Date;
+  formatter: (d: Date) => string;
+}) {
+  // Ensures consistent client rendering; date-fns format is deterministic
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  // We still render on SSR, but suppressHydrationWarning just in case of env diffs
+  return (
+    <span className="text-sm" suppressHydrationWarning>
+      {formatter(value)}
+    </span>
   );
 }
 

@@ -159,9 +159,10 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
         </DialogHeader>
 
         <Tabs defaultValue="appearance" className="mt-2">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="layout">Layout</TabsTrigger>
+            <TabsTrigger value="household">Household</TabsTrigger>
           </TabsList>
 
           <TabsContent value="appearance" className="mt-4">
@@ -195,6 +196,10 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                 ))}
               </RadioGroup>
             </div>
+          </TabsContent>
+
+          <TabsContent value="household" className="mt-4">
+            <HouseholdPanel />
           </TabsContent>
 
           <TabsContent value="layout" className="mt-4">
@@ -269,3 +274,108 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
 }
 
 export default SettingsDialog;
+
+function HouseholdPanel() {
+  const [loading, setLoading] = useState(true);
+  const [link, setLink] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/household", { cache: "no-store" });
+        const data = await res.json();
+        if (!ignore) setLink(data?.link ?? null);
+      } catch (e: any) {
+        if (!ignore) setError(e?.message || "Failed to load");
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  if (loading)
+    return <div className="text-sm text-muted-foreground">Loading…</div>;
+  if (error) return <div className="text-sm text-red-600">{error}</div>;
+
+  if (!link)
+    return (
+      <div className="space-y-3">
+        <div className="text-sm text-muted-foreground">
+          No household linked yet.
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            onClick={async () => {
+              setError(null);
+              setLoading(true);
+              try {
+                const res = await fetch("/api/onboarding", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ account_type: "household" }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data?.error || "Failed");
+                // Refresh from /api/household to get full link row
+                const res2 = await fetch("/api/household", {
+                  cache: "no-store",
+                });
+                const d2 = await res2.json();
+                setLink(d2?.link ?? { code: data?.code });
+              } catch (e: any) {
+                setError(e?.message || "Failed to generate code");
+              } finally {
+                setLoading(false);
+              }
+            }}
+          >
+            Create household code
+          </Button>
+          <span className="text-sm text-muted-foreground self-center">
+            Or use the avatar menu → Link household to enter a code.
+          </span>
+        </div>
+        {error ? <div className="text-sm text-red-600">{error}</div> : null}
+      </div>
+    );
+
+  const isLinked = Boolean(link.partner_user_id);
+  return (
+    <div className="space-y-3">
+      <div className="text-sm">
+        Status:{" "}
+        {isLinked ? (
+          <span className="text-green-600">Linked</span>
+        ) : (
+          <span className="text-yellow-600">Awaiting partner</span>
+        )}
+      </div>
+      <div className="text-sm">
+        Owner:{" "}
+        <span className="font-medium">
+          {link.owner_email || link.owner_user_id}
+        </span>
+      </div>
+      <div className="text-sm">
+        Partner:{" "}
+        <span className="font-medium">
+          {link.partner_email || link.partner_user_id || "—"}
+        </span>
+      </div>
+      {!isLinked && link.code ? (
+        <div className="rounded-md border p-3">
+          <div className="text-xs text-muted-foreground mb-1">
+            Share this code with your partner:
+          </div>
+          <div className="font-mono tracking-widest text-lg">{link.code}</div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

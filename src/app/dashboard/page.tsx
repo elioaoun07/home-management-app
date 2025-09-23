@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServerRSC } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import DashboardClient from "./DashboardClient";
@@ -18,6 +18,8 @@ type Tx = {
   description: string | null;
   account_id: string;
   inserted_at: string;
+  user_id?: string;
+  user_name?: string;
 };
 
 function fmtDate(d: Date): string {
@@ -32,7 +34,7 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const supabase = await supabaseServer();
+  const supabase = await supabaseServerRSC();
 
   const {
     data: { user },
@@ -40,6 +42,17 @@ export default async function DashboardPage({
 
   if (!user) {
     redirect("/login");
+  }
+
+  // Ensure onboarding walkthrough for new users
+  const { data: onboarding } = await supabase
+    .from("user_onboarding")
+    .select("completed, account_type")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!onboarding?.completed) {
+    redirect("/welcome");
   }
 
   // Defaults: current month (from the 1st to today)
@@ -52,21 +65,80 @@ export default async function DashboardPage({
   const start = (typeof sp?.start === "string" && sp.start) || defaultStart;
   const end = (typeof sp?.end === "string" && sp.end) || defaultEnd;
 
-  // Fetch filtered transactions for the current user
-  const { data: transactions, error } = await supabase
+  // Determine if user has a household link to include partner transactions
+  const { data: link } = await supabase
+    .from("household_links")
+    .select(
+      "owner_user_id, owner_email, partner_user_id, partner_email, active"
+    )
+    .or(`owner_user_id.eq.${user.id},partner_user_id.eq.${user.id}`)
+    .eq("active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const partnerId = link
+    ? link.owner_user_id === user.id
+      ? link.partner_user_id
+      : link.owner_user_id
+    : null;
+
+  // Fetch filtered transactions for the current user (+ partner if linked)
+  // and join minimal user display info from auth.users
+  let query = supabase
     .from("transactions")
     .select(
-      "id, date, category, subcategory, amount, description, account_id, inserted_at"
+      "id, date, category, subcategory, amount, description, account_id, inserted_at, user_id"
     )
-    .eq("user_id", user.id)
     .gte("date", start)
     .lte("date", end)
     .order("inserted_at", { ascending: false })
     .limit(200);
 
+  if (partnerId) {
+    query = query.in("user_id", [user.id, partnerId]);
+  } else {
+    query = query.eq("user_id", user.id);
+  }
+
+  const { data: rawRows, error } = (await query) as any;
+
   if (error) {
     console.error("Failed to fetch transactions:", error);
   }
+
+  // Compute display names without joining auth.users (blocked for anon key):
+  // Use current user's metadata for "me" and emails from household link for partner.
+  const meMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const meName =
+    (meMeta.full_name as string | undefined) ||
+    (meMeta.name as string | undefined) ||
+    (user.email as string | undefined) ||
+    undefined;
+  let partnerName: string | undefined = undefined;
+  if (partnerId && link) {
+    partnerName =
+      link.owner_user_id === partnerId
+        ? (link.owner_email as string | undefined)
+        : (link.partner_email as string | undefined);
+    if (!partnerName) partnerName = "Partner";
+  }
+
+  const rows: Tx[] = (rawRows || []).map((r: any) => ({
+    id: r.id,
+    date: r.date,
+    category: r.category,
+    subcategory: r.subcategory,
+    amount: r.amount,
+    description: r.description,
+    account_id: r.account_id,
+    inserted_at: r.inserted_at,
+    user_id: r.user_id,
+    user_name:
+      r.user_id === user.id
+        ? meName || user.email || "Me"
+        : partnerName || "Partner",
+  }));
 
   return (
     <main className="mx-auto w-full max-w-5xl p-6">
@@ -92,9 +164,10 @@ export default async function DashboardPage({
       </div>
 
       <DashboardClient
-        rows={(transactions as Tx[]) ?? []}
+        rows={rows}
         start={start}
         end={end}
+        showUser={onboarding?.account_type === "household"}
       />
     </main>
   );

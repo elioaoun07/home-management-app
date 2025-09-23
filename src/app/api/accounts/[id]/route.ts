@@ -10,7 +10,7 @@ export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -71,7 +71,7 @@ export async function DELETE(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();

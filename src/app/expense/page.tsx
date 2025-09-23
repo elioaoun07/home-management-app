@@ -1,9 +1,9 @@
 import ExpenseForm from "@/components/expense/ExpenseForm";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServerRSC } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
 export default async function ExpensePage() {
-  const supabase = supabaseServer();
+  const supabase = await supabaseServerRSC();
   const {
     data: { user },
   } = await supabase.auth.getUser();

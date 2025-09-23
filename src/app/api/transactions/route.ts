@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(_req: NextRequest) {
   // Use SSR client to access the authenticated user via cookies
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -120,7 +120,7 @@ export async function POST(_req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();

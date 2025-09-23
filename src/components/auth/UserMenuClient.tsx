@@ -18,7 +18,8 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import LinkHouseholdDialog from "./LinkHouseholdDialog";
 
 type Props = {
   name: string;
@@ -35,6 +36,32 @@ export default function UserMenuClient({ name, email, avatarUrl }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+
+  // Redirect to onboarding walkthrough for new users (except on auth/welcome routes)
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      if (
+        pathname === "/login" ||
+        pathname.startsWith("/reset-password") ||
+        pathname === "/welcome" ||
+        pathname.startsWith("/auth/")
+      ) {
+        return;
+      }
+      try {
+        const res = await fetch("/api/onboarding", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!ignore && data && data.completed === false) {
+          router.replace("/welcome");
+        }
+      } catch {}
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [pathname, router]);
 
   // Never show the menu on auth pages
   if (pathname === "/login" || pathname.startsWith("/reset-password")) {
@@ -63,6 +90,7 @@ export default function UserMenuClient({ name, email, avatarUrl }: Props) {
   return (
     <div className="fixed top-3 right-3 z-50">
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <LinkHouseholdDialog open={linkOpen} onOpenChange={setLinkOpen} />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="flex items-center gap-2 px-2">
@@ -90,6 +118,10 @@ export default function UserMenuClient({ name, email, avatarUrl }: Props) {
           <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
             <SettingsIcon className="mr-2 h-4 w-4" />
             <span>Settings</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setLinkOpen(true)}>
+            <UserIcon className="mr-2 h-4 w-4" />
+            <span>Link household</span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleSignOut}>
             <LogOut className="mr-2 h-4 w-4" />

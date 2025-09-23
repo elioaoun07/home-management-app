@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = supabaseServer(cookies());
+    const supabase = await supabaseServer(await cookies());
 
     // Use Supabase server client to sign in and set cookies
     const { data, error } = await supabase.auth.signInWithPassword({

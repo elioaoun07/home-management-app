@@ -1,9 +1,9 @@
 // Server component
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServerRSC } from "@/lib/supabase/server";
 import UserMenuClient from "./UserMenuClient";
 
 export default async function UserMenu() {
-  const supabase = await supabaseServer();
+  const supabase = await supabaseServerRSC();
   const {
     data: { user },
   } = await supabase.auth.getUser();

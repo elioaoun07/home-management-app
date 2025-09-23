@@ -9,7 +9,7 @@ export async function PATCH(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -49,7 +49,7 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();

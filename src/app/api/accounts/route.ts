@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic"; // disable caching
 
 export async function GET(_req: NextRequest) {
   // Use SSR client bound to request cookies to identify the logged-in user
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -125,7 +125,7 @@ export async function GET(_req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   // Create a new account for the authenticated user
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();

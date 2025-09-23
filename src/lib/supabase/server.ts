@@ -1,48 +1,57 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-// Accept an optional cookies store so callers (like app routes) can pass
-// the request/response cookie store and allow Supabase SSR client to set
-// and delete cookies when signing in/out.
-export function supabaseServer(store?: ReturnType<typeof cookies>) {
-  const storeLocal = store ?? cookies();
+// Route/Server Action safe client: allows setting cookies (for API routes)
+export async function supabaseServer(
+  store?: Awaited<ReturnType<typeof cookies>>
+) {
+  const storeLocal = store ?? (await cookies());
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      // Use getAll/setAll methods which are compatible with the newer
-      // @supabase/ssr expectations. We forward to Next's cookies store when
-      // possible. In server components `cookies()` is read-only; in route
-      // handlers it supports set/delete — forwarding is a best-effort.
       cookies: {
-        async getAll() {
-          try {
-            const resolved = await storeLocal;
-            // RequestCookies has getAll() in Next; fallback to empty.
-            const all =
-              typeof (resolved as any).getAll === "function"
-                ? (resolved as any).getAll()
-                : [];
-            return all.map((c: any) => ({ name: c.name, value: c.value }));
-          } catch (e) {
-            return [];
-          }
+        get(name: string) {
+          const c = (storeLocal as any).get?.(name);
+          return c?.value ?? undefined;
         },
-        async setAll(
-          items: Array<{ name: string; value: string; options?: any }>
-        ) {
-          try {
-            const resolved = await storeLocal;
-            if (typeof (resolved as any).set === "function") {
-              // If the store exposes a set method (route handlers), use it for each cookie
-              for (const it of items) {
-                (resolved as any).set(it.name, it.value, it.options ?? {});
-              }
-            }
-          } catch (e) {
-            // ignore
-          }
+        set(name: string, value: string, options?: any) {
+          // In Route Handlers/Server Actions, Next allows cookie mutation
+          (storeLocal as any).set?.(name, value, options ?? {});
         },
+        remove(name: string, options?: any) {
+          (storeLocal as any).set?.(name, "", {
+            ...(options ?? {}),
+            maxAge: 0,
+          });
+        },
+      },
+    }
+  );
+}
+
+// Server Component safe client: read-only cookies, no persistence to avoid Next cookies mutation errors
+export async function supabaseServerRSC() {
+  const storeLocal = await cookies();
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          const c = (storeLocal as any).get?.(name);
+          return c?.value ?? undefined;
+        },
+        set() {
+          // no-op: Next disallows cookie mutation in RSC; avoid hydration errors
+        },
+        remove() {
+          // no-op in RSC
+        },
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
       },
     }
   );

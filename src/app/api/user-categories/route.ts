@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();

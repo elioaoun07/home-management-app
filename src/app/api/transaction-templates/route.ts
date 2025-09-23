@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest) {
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest) {
 }
 
 export async function POST(_req: NextRequest) {
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -106,7 +106,7 @@ export async function POST(_req: NextRequest) {
 }
 
 export async function PATCH(_req: NextRequest) {
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -198,7 +198,7 @@ export async function PATCH(_req: NextRequest) {
 }
 
 export async function DELETE(_req: NextRequest) {
-  const supabase = supabaseServer(cookies());
+  const supabase = await supabaseServer(await cookies());
   const {
     data: { user },
   } = await supabase.auth.getUser();

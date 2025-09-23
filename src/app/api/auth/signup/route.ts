@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = supabaseServer(cookies());
+    const supabase = await supabaseServer(await cookies());
 
     const { data, error } = await supabase.auth.signUp({
       email,

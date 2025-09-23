@@ -1,5 +1,6 @@
 "use client";
 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -17,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 export type Tx = {
@@ -29,12 +30,15 @@ export type Tx = {
   description: string | null;
   account_id: string;
   inserted_at: string;
+  user_id?: string;
+  user_name?: string;
 };
 
 type Props = {
   rows: Tx[];
   start: string;
   end: string;
+  showUser?: boolean;
   onChange?: (updated: Tx) => void;
   // Deferred mode: don't call API per cell, let parent collect patches and save in batch
   deferredSave?: boolean;
@@ -64,6 +68,7 @@ export default function TransactionsTable({
   rows,
   start,
   end,
+  showUser = false,
   onChange,
   deferredSave = false,
   dirtyIds,
@@ -125,6 +130,27 @@ export default function TransactionsTable({
       cancelled = true;
     };
   }, [rows, categoriesByAccount]);
+
+  // Build a deterministic color map for user badges to increase contrast, especially for 2 users
+  const userColorMap = useMemo(() => {
+    const palette = [
+      "#2563eb", // blue-600
+      "#16a34a", // green-600
+      "#a855f7", // purple-500
+      "#f59e0b", // amber-500
+      "#ef4444", // red-500
+    ];
+    const idsInOrder: string[] = [];
+    for (const r of rows) {
+      const id = r.user_id || "__unknown__";
+      if (!idsInOrder.includes(id)) idsInOrder.push(id);
+    }
+    const map: Record<string, string> = {};
+    idsInOrder.forEach((id, idx) => {
+      map[id] = palette[idx] || colorForId(id);
+    });
+    return map;
+  }, [rows]);
 
   const beginEdit = (row: Tx, field: Field) => {
     setEditing({ id: row.id, field });
@@ -329,6 +355,9 @@ export default function TransactionsTable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-[120px]">Date</TableHead>
+            {showUser ? (
+              <TableHead className="w-[140px]">User</TableHead>
+            ) : null}
             <TableHead>Category</TableHead>
             <TableHead>Subcategory</TableHead>
             <TableHead className="text-right w-[140px]">Amount</TableHead>
@@ -342,7 +371,7 @@ export default function TransactionsTable({
           {dataRows.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={5}
+                colSpan={5 + (showUser ? 1 : 0) + (deferredSave ? 1 : 0)}
                 className="text-muted-foreground text-center py-8"
               >
                 No transactions yet.
@@ -386,6 +415,20 @@ export default function TransactionsTable({
                       t.date?.slice(0, 10)
                     )}
                   </TableCell>
+                  {showUser ? (
+                    <TableCell className="whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <UserBadge
+                          id={t.user_id}
+                          name={t.user_name}
+                          color={userColorMap[t.user_id || "__unknown__"]}
+                        />
+                        <span className="text-muted-foreground">
+                          {t.user_name}
+                        </span>
+                      </div>
+                    </TableCell>
+                  ) : null}
                   <TableCell
                     onClick={() => !saving && beginEdit(t, "category")}
                     className="cursor-text"
@@ -493,7 +536,7 @@ export default function TransactionsTable({
                   </TableCell>
                   <TableCell
                     onClick={() => !saving && beginEdit(t, "description")}
-                    className="max-w-[400px] truncate cursor-text"
+                    className="cursor-text"
                     title={t.description ?? undefined}
                   >
                     {isEditing("description") ? (
@@ -514,11 +557,13 @@ export default function TransactionsTable({
                         disabled={saving}
                       />
                     ) : (
-                      t.description
+                      <div className="max-w-[420px] whitespace-normal overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]">
+                        {t.description}
+                      </div>
                     )}
                   </TableCell>
                   {deferredSave ? (
-                    <TableCell className="text-right">
+                    <TableCell className="text-right w-[160px]">
                       {dirtyIds?.has(t.id) ? (
                         <div className="flex items-center justify-end gap-2">
                           <button
@@ -561,4 +606,36 @@ export default function TransactionsTable({
       </Table>
     </div>
   );
+}
+
+function UserBadge({
+  id,
+  name,
+  color,
+}: {
+  id?: string;
+  name?: string;
+  color?: string;
+}) {
+  const bg = color || colorForId(id || "");
+  const initials = (name || "").trim().slice(0, 2).toUpperCase() || "--";
+  return (
+    <Avatar className="size-6">
+      <AvatarFallback
+        className="text-[10px] font-medium"
+        style={{ backgroundColor: bg, color: "white" }}
+      >
+        {initials}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+function colorForId(id: string) {
+  if (!id) return "#64748b"; // slate-500 fallback
+  // Simple hash to color
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  const hue = Math.abs(h) % 360;
+  return `hsl(${hue} 65% 45%)`;
 }

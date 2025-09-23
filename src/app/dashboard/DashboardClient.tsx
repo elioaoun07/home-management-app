@@ -10,6 +10,7 @@ type Props = {
   rows: Tx[];
   start: string;
   end: string;
+  showUser?: boolean;
 };
 
 type Patch = Partial<{
@@ -20,7 +21,7 @@ type Patch = Partial<{
   subcategory_id: string | null | "";
 }> & { id: string };
 
-export default function DashboardClient({ rows, start, end }: Props) {
+export default function DashboardClient({ rows, start, end, showUser }: Props) {
   const [tableRows, setTableRows] = useState<Tx[]>(rows);
   const [pending, setPending] = useState<Record<string, Patch>>({});
   const [saving, setSaving] = useState(false);
@@ -115,6 +116,7 @@ export default function DashboardClient({ rows, start, end }: Props) {
         rows={tableRows}
         start={start}
         end={end}
+        showUser={showUser ?? new Set(rows.map((r) => r.user_id)).size > 1}
         deferredSave
         dirtyIds={dirtyIds}
         onDeferredChange={handleDeferredChange}

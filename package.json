@@ -8,6 +8,7 @@
     "build": "next build --turbopack --no-lint",
     "start": "next start -p 3000",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit -p .",
     "icons": "node scripts/generate-icons.cjs",
     "prepare": "husky install"
   },
